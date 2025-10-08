@@ -8,22 +8,39 @@ class PriceAnalyzer {
     }
 
     setupEventListeners() {
+        console.log('Configurando event listeners...');
+        
         const uploadArea = document.getElementById('uploadArea');
         const fileInput = document.getElementById('fileInput');
 
         if (uploadArea && fileInput) {
-            uploadArea.addEventListener('click', () => fileInput.click());
+            console.log('Elementos encontrados, adicionando listeners...');
+            
+            // Clique na área de upload
+            uploadArea.addEventListener('click', (e) => {
+                console.log('Upload area clicada');
+                e.preventDefault();
+                fileInput.click();
+        });
+
+        // Drag and drop
             uploadArea.addEventListener('dragover', this.handleDragOver.bind(this));
             uploadArea.addEventListener('dragleave', this.handleDragLeave.bind(this));
             uploadArea.addEventListener('drop', this.handleDrop.bind(this));
+            
+            // Mudança no input de arquivo
             fileInput.addEventListener('change', this.handleFileSelect.bind(this));
+            
+            console.log('Event listeners configurados com sucesso');
         } else {
             console.error('Elementos uploadArea ou fileInput não encontrados');
+            console.log('uploadArea:', uploadArea);
+            console.log('fileInput:', fileInput);
         }
     }
 
     handleDragOver(e) {
-        e.preventDefault();
+            e.preventDefault();
         e.currentTarget.classList.add('dragover');
     }
 
@@ -33,7 +50,7 @@ class PriceAnalyzer {
     }
 
     handleDrop(e) {
-        e.preventDefault();
+            e.preventDefault();
         e.currentTarget.classList.remove('dragover');
         const files = e.dataTransfer.files;
         if (files.length > 0) {
@@ -65,7 +82,11 @@ class PriceAnalyzer {
         }
 
         console.log('Arquivo válido, iniciando processamento...');
-        this.showLoading();
+        
+        // Limpar dados anteriores
+        this.clearData();
+        
+            this.showLoading();
 
         try {
             console.log('Lendo arquivo Excel...');
@@ -81,6 +102,72 @@ class PriceAnalyzer {
             console.error('Erro ao processar arquivo:', error);
             this.showError(`Erro ao processar arquivo: ${error.message}`);
         }
+    }
+
+    clearData() {
+        console.log('Limpando dados anteriores...');
+        
+        // Limpar dados do priceAnalyzer
+        this.data = [];
+        this.suppliers.clear();
+        this.products.clear();
+        this.lowestPrices.clear();
+        
+        // Limpar localStorage
+        localStorage.removeItem('canaverdeData');
+        
+        // Ocultar menu hambúrguer
+        const menuToggle = document.querySelector('.menu-toggle');
+        if (menuToggle) {
+            menuToggle.classList.remove('visible');
+        }
+        
+        // Ocultar seção de análise
+        const analysisSection = document.getElementById('analysisSection');
+        if (analysisSection) {
+            analysisSection.style.display = 'none';
+        }
+        
+        // Mostrar área de upload
+        const uploadArea = document.getElementById('uploadArea');
+        if (uploadArea) {
+            uploadArea.style.display = 'block';
+            // Restaurar conteúdo original da área de upload
+            uploadArea.innerHTML = `
+                <div class="upload-icon">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                </div>
+                <div class="upload-text">
+                    Arraste e solte seu arquivo Excel aqui ou clique para selecionar
+                </div>
+                <input type="file" id="fileInput" class="file-input" accept=".xlsx,.xls" />
+                <button class="btn" onclick="openFileDialog()">
+                    <i class="fas fa-file-excel"></i> Selecionar Arquivo Excel
+                </button>
+            `;
+        }
+        
+        // Limpar tabela
+        const tableHead = document.getElementById('tableHead');
+        const tableBody = document.getElementById('tableBody');
+        if (tableHead) tableHead.innerHTML = '';
+        if (tableBody) tableBody.innerHTML = '';
+        
+        // Resetar estatísticas
+        const totalProductsEl = document.getElementById('totalProducts');
+        const totalSuppliersEl = document.getElementById('totalSuppliers');
+        const lowestPricesEl = document.getElementById('lowestPrices');
+        
+        if (totalProductsEl) totalProductsEl.textContent = '0';
+        if (totalSuppliersEl) totalSuppliersEl.textContent = '0';
+        if (lowestPricesEl) lowestPricesEl.textContent = '0';
+        
+        // Reconfigurar event listeners após limpar
+        setTimeout(() => {
+            setupGlobalEventListeners();
+        }, 100);
+        
+        console.log('Dados limpos com sucesso - interface resetada');
     }
 
     isValidExcelFile(file) {
@@ -172,7 +259,7 @@ class PriceAnalyzer {
 
         const headers = rawData[0];
         const dataRows = rawData.slice(1);
-        
+
         // Limpar cabeçalhos
         const cleanHeaders = headers.map(header => {
             const cleaned = String(header || '').trim();
@@ -450,7 +537,7 @@ class PriceAnalyzer {
         }
         
         if (analysisSection) {
-            analysisSection.style.display = 'block';
+        analysisSection.style.display = 'block';
         }
 
         // Mostrar menu hambúrguer após carregar Excel
@@ -470,7 +557,7 @@ class PriceAnalyzer {
 
         // Criar tabela
         this.createPriceTable();
-
+        
         // Mostrar debug info
         this.showDebugInfo();
 
@@ -607,12 +694,12 @@ function updatePrice(input) {
         console.error('Input não fornecido para updatePrice');
         return;
     }
-
+    
     const product = input.dataset.product;
     const supplier = input.dataset.supplier;
     const unitPrice = parseFloat(input.dataset.unitPrice);
     const quantity = parseInt(input.value) || 0;
-
+    
     console.log(`Atualizando preço: ${product} - ${supplier} - Qtd: ${quantity} - Preço: ${unitPrice}`);
 
     // Encontrar a linha da tabela
@@ -621,7 +708,7 @@ function updatePrice(input) {
         console.error('Linha da tabela não encontrada');
         return;
     }
-
+    
     // Atualizar preço total
     const totalPriceCell = row.querySelector('[data-total-price]');
     if (totalPriceCell) {
@@ -635,15 +722,15 @@ function updatePrice(input) {
             const totalPrice = unitPrice * quantity;
             totalPriceCell.textContent = `R$ ${totalPrice.toFixed(2).replace('.', ',')}`;
             // Quando há quantidade, aplicar destaque se for menor preço
-            if (isLowest) {
-                totalPriceCell.classList.add('lowest-price');
-            } else {
-                totalPriceCell.classList.remove('lowest-price');
-            }
+        if (isLowest) {
+            totalPriceCell.classList.add('lowest-price');
+        } else {
+            totalPriceCell.classList.remove('lowest-price');
+        }
         }
         totalPriceCell.dataset.totalPrice = quantity * unitPrice;
     }
-
+    
     // Atualizar lista de fornecedores
     updateSupplierListPrice(product, supplier, quantity, unitPrice);
 }
@@ -652,6 +739,63 @@ function updateSupplierListPrice(product, supplier, quantity, unitPrice) {
     // Esta função pode ser expandida para atualizar a lista de fornecedores
     // quando quantidades mudarem
     console.log(`Atualizando lista de fornecedores: ${product} - ${supplier} - Qtd: ${quantity}`);
+}
+
+// Função global para abrir o diálogo de arquivo
+function openFileDialog() {
+    // Criar um input de arquivo temporário e abrir o explorador
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.xlsx,.xls';
+    fileInput.style.display = 'none';
+    
+    // Adicionar ao documento
+    document.body.appendChild(fileInput);
+    
+    // Quando o arquivo for selecionado
+    fileInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file && window.priceAnalyzer) {
+            console.log('Arquivo selecionado:', file.name);
+            window.priceAnalyzer.handleFile(file);
+        }
+        // Remover o input temporário
+        document.body.removeChild(fileInput);
+    });
+    
+    // Abrir o explorador de arquivos
+    fileInput.click();
+}
+
+// Função global para configurar event listeners
+function setupGlobalEventListeners() {
+    console.log('Configurando event listeners globais...');
+    
+    const uploadArea = document.getElementById('uploadArea');
+    const fileInput = document.getElementById('fileInput');
+
+    if (uploadArea && fileInput) {
+        console.log('Elementos encontrados, configurando listeners...');
+        
+        // Clique na área de upload
+        uploadArea.addEventListener('click', (e) => {
+            console.log('Upload area clicada');
+            e.preventDefault();
+            fileInput.click();
+        });
+        
+        // Mudança no input de arquivo
+        fileInput.addEventListener('change', (e) => {
+            console.log('Arquivo selecionado via input');
+            if (window.priceAnalyzer) {
+                window.priceAnalyzer.handleFileSelect(e);
+            }
+        });
+        
+        console.log('Event listeners globais configurados');
+                        } else {
+        console.error('Elementos não encontrados para configuração global');
+    }
 }
 
 // Função para alternar o menu hambúrguer
@@ -824,12 +968,28 @@ function hideMenuOnReload() {
     }
 }
 
+// Função para limpar completamente o localStorage
+function clearAllData() {
+    console.log('Limpando todos os dados do localStorage...');
+    localStorage.removeItem('canaverdeData');
+    console.log('localStorage limpo');
+}
+
 // Inicializar quando a página carregar
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM carregado, inicializando...');
+    
+    // Limpar dados antigos imediatamente
+    clearAllData();
+    
     window.priceAnalyzer = new PriceAnalyzer();
     
-    // Tentar restaurar dados se voltou da página de fornecedores
-    if (!restoreDataFromSuppliers()) {
-        hideMenuOnReload(); // Garantir que menu está oculto inicialmente
-    }
+    // Configurar event listeners globais
+    setupGlobalEventListeners();
+    
+    // Não restaurar dados automaticamente - deixar usuário carregar novo arquivo
+    console.log('Aguardando usuário carregar novo arquivo Excel...');
+    
+    // Garantir que interface esteja no estado inicial
+    hideMenuOnReload();
 });
