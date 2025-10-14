@@ -831,7 +831,7 @@ function toggleMenu() {
         localStorage.setItem('canaverdeData', JSON.stringify(dataToSave));
         
         console.log('Dados salvos no localStorage:', dataToSave);
-        console.log('Navegando para suppliers.html...');
+        console.log('Navegando para pages/suppliers.html...');
         
         // Mostrar feedback visual
         const menuToggle = document.querySelector('.menu-toggle');
@@ -844,11 +844,11 @@ function toggleMenu() {
         
         // Navegar diretamente para página de fornecedores
         try {
-            console.log('Navegando para suppliers.html...');
-    window.location.href = 'suppliers.html';
+            console.log('Navegando para pages/suppliers.html...');
+    window.location.href = 'pages/suppliers.html';
         } catch (error) {
             console.error('Erro na navegação:', error);
-            alert('Erro: Não foi possível navegar para suppliers.html\n\nVerifique se o arquivo suppliers.html existe no mesmo diretório.');
+            alert('Erro: Não foi possível navegar para pages/suppliers.html\n\nVerifique se o arquivo pages/suppliers.html existe no mesmo diretório.');
         }
                         } else {
         console.log('Nenhum dado encontrado');
