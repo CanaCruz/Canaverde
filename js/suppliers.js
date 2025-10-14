@@ -12,7 +12,7 @@ function goBackToMain() {
     }
     
     // Adicionar parâmetro para indicar que estamos voltando da página de fornecedores
-    window.location.href = 'index.html?fromSuppliers=true';
+    window.location.href = '../index.html?fromSuppliers=true';
 }
 
 // Função para carregar dados na página de fornecedores

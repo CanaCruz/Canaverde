@@ -6,12 +6,16 @@ Sistema inteligente para análise e comparação de preços de fornecedores atra
 
 ```
 Canaverde/
-├── index.html              # Página principal (versão corrigida)
-├── suppliers.html          # Página de resumo por fornecedor
-├── styles.css              # Estilos CSS
+├── index.html              # Página principal
+├── css/                    # Pasta de estilos CSS
+│   └── styles.css          # Estilos principais
 ├── js/                     # Pasta de arquivos JavaScript
 │   ├── script.js           # Script principal
-│   └── suppliers.js         # Script da página de fornecedores
+│   └── suppliers.js        # Script da página de fornecedores
+├── pages/                  # Pasta de páginas adicionais
+│   └── suppliers.html      # Página de resumo por fornecedor
+├── assets/                 # Pasta para recursos (imagens, ícones, etc.)
+├── config.json             # Arquivo de configuração do projeto
 └── README.md               # Este arquivo
 ```
 

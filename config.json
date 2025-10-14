@@ -1,0 +1,22 @@
+{
+  "project": {
+    "name": "Mercado Canaverde - Sistema de Análise de Preços",
+    "version": "2.0",
+    "description": "Sistema inteligente para análise e comparação de preços de fornecedores através de planilhas Excel"
+  },
+  "structure": {
+    "css": "css/",
+    "js": "js/",
+    "pages": "pages/",
+    "assets": "assets/"
+  },
+  "features": {
+    "excel_import": true,
+    "price_selection": true,
+    "drag_and_drop": true,
+    "quantity_editing": true,
+    "visual_separation": true,
+    "responsive_design": true
+  },
+  "last_updated": "2024-12-14"
+}
