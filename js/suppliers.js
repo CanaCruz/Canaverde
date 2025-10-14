@@ -167,9 +167,10 @@ function createSupplierCards(data) {
                             <span class="product-detail-label">Quantidade:</span>
                             <input type="number" 
                                    class="quantity-input-supplier" 
-                                   value="${quantity}" 
+                                   value="${quantity > 0 ? quantity : ''}" 
                                    min="0" 
                                    step="1"
+                                   placeholder="0"
                                    data-product="${product.product}"
                                    data-supplier="${product.supplier}"
                                    data-unit-price="${product.price}"
@@ -217,6 +218,9 @@ function createSupplierCards(data) {
     }).join('');
     
     container.innerHTML = suppliersHtml;
+    
+    // Atualizar estatísticas após criar os cards
+    updateSupplierStats();
 }
 
 // Função para atualizar quantidade
@@ -226,6 +230,9 @@ function updateSupplierQuantity(input) {
     const quantity = parseInt(input.value) || 0;
     
     console.log(`Atualizando quantidade: ${product} - ${supplier} - Qtd: ${quantity}`);
+    
+    // Atualizar estatísticas do fornecedor
+    updateSupplierStats();
     
     // Salvar dados atualizados no localStorage
     saveUpdatedData();
