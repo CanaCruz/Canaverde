@@ -11,8 +11,8 @@ function goBackToMain() {
         console.log('Nenhum dado encontrado no localStorage');
     }
     
-    // Navegar de volta para a página principal
-    window.location.href = 'index.html';
+    // Adicionar parâmetro para indicar que estamos voltando da página de fornecedores
+    window.location.href = 'index.html?fromSuppliers=true';
 }
 
 // Função para carregar dados na página de fornecedores
@@ -131,8 +131,15 @@ function createSupplierCards(data) {
         return;
     }
     
-    // Criar HTML para cada fornecedor
-    const suppliersHtml = Object.keys(supplierGroups).map(supplier => {
+    // Manter ordem original dos fornecedores baseada na ordem dos dados originais
+    const originalSupplierOrder = [...new Set(data.data.map(item => item.supplier))];
+    const orderedSuppliers = originalSupplierOrder.filter(supplier => supplierGroups[supplier]);
+    
+    console.log('Ordem original dos fornecedores:', originalSupplierOrder);
+    console.log('Fornecedores com produtos (ordenados):', orderedSuppliers);
+    
+    // Criar HTML para cada fornecedor na ordem original
+    const suppliersHtml = orderedSuppliers.map(supplier => {
         const products = supplierGroups[supplier];
         
         console.log(`Fornecedor: ${supplier}, Produtos com menor preço: ${products.length}`);
@@ -144,14 +151,29 @@ function createSupplierCards(data) {
             console.log(`Produto: ${product.product}, Qtd: ${quantity}`);
             
             return `
-                <div class="product-item lowest-price">
+                <div class="product-item lowest-price" 
+                     draggable="true" 
+                     data-product="${product.product}"
+                     data-supplier="${product.supplier}"
+                     data-unit-price="${product.price}"
+                     ondragstart="handleDragStart(event)"
+                     ondragend="handleDragEnd(event)">
                     <div class="product-header">
                         <span class="product-name">${product.product}</span>
+                        <span class="drag-handle">⋮⋮</span>
                     </div>
                     <div class="product-details">
                         <div class="product-detail">
                             <span class="product-detail-label">Quantidade:</span>
-                            <span class="product-detail-value">${quantity}</span>
+                            <input type="number" 
+                                   class="quantity-input-supplier" 
+                                   value="${quantity}" 
+                                   min="0" 
+                                   step="1"
+                                   data-product="${product.product}"
+                                   data-supplier="${product.supplier}"
+                                   data-unit-price="${product.price}"
+                                   onchange="updateSupplierQuantity(this)">
                         </div>
                         <div class="product-detail">
                             <span class="product-detail-label">Preço Unit.:</span>
@@ -165,7 +187,12 @@ function createSupplierCards(data) {
         }).join('');
         
         return `
-            <div class="supplier-card">
+            <div class="supplier-card" 
+                 data-supplier="${supplier}"
+                 ondragover="handleDragOver(event)"
+                 ondrop="handleDrop(event)"
+                 ondragenter="handleDragEnter(event)"
+                 ondragleave="handleDragLeave(event)">
                 <div class="supplier-header">
                     <div class="supplier-name">
                         <i class="fas fa-store"></i>
@@ -190,6 +217,206 @@ function createSupplierCards(data) {
     }).join('');
     
     container.innerHTML = suppliersHtml;
+}
+
+// Função para atualizar quantidade
+function updateSupplierQuantity(input) {
+    const product = input.dataset.product;
+    const supplier = input.dataset.supplier;
+    const quantity = parseInt(input.value) || 0;
+    
+    console.log(`Atualizando quantidade: ${product} - ${supplier} - Qtd: ${quantity}`);
+    
+    // Salvar dados atualizados no localStorage
+    saveUpdatedData();
+}
+
+// Função para atualizar estatísticas do fornecedor
+function updateSupplierStats() {
+    const supplierCards = document.querySelectorAll('.supplier-card');
+    
+    supplierCards.forEach(card => {
+        const products = card.querySelectorAll('.product-item');
+        let totalValue = 0;
+        
+        products.forEach(product => {
+            const quantityInput = product.querySelector('.quantity-input-supplier');
+            const unitPrice = parseFloat(quantityInput.dataset.unitPrice) || 0;
+            const quantity = parseInt(quantityInput.value) || 0;
+            const totalPrice = unitPrice * quantity;
+            totalValue += totalPrice;
+        });
+        
+        // Atualizar valor total no cabeçalho do fornecedor
+        const valueStat = card.querySelector('.supplier-stat:last-child .supplier-stat-number');
+        if (valueStat) {
+            valueStat.textContent = `R$ ${totalValue.toFixed(2).replace('.', ',')}`;
+        }
+    });
+}
+
+// Função para salvar dados atualizados
+function saveUpdatedData() {
+    const savedData = localStorage.getItem('canaverdeData');
+    if (!savedData) return;
+    
+    try {
+        const data = JSON.parse(savedData);
+        
+        // Atualizar quantidades nos dados
+        const quantityInputs = document.querySelectorAll('.quantity-input-supplier');
+        quantityInputs.forEach(input => {
+            const product = input.dataset.product;
+            const supplier = input.dataset.supplier;
+            const quantity = parseInt(input.value) || 0;
+            
+            const dataItem = data.data.find(item => 
+                item.product === product && item.supplier === supplier
+            );
+            
+            if (dataItem) {
+                dataItem.quantity = quantity;
+            }
+        });
+        
+        // Salvar dados atualizados
+        localStorage.setItem('canaverdeData', JSON.stringify(data));
+        console.log('Dados atualizados salvos no localStorage');
+        
+    } catch (error) {
+        console.error('Erro ao salvar dados atualizados:', error);
+    }
+}
+
+// Variáveis globais para drag and drop
+let draggedElement = null;
+let draggedData = null;
+
+// Funções de drag and drop
+function handleDragStart(event) {
+    draggedElement = event.target;
+    draggedData = {
+        product: event.target.dataset.product,
+        supplier: event.target.dataset.supplier,
+        unitPrice: parseFloat(event.target.dataset.unitPrice)
+    };
+    
+    event.target.style.opacity = '0.5';
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/html', event.target.outerHTML);
+    
+    console.log('Iniciando drag:', draggedData);
+}
+
+function handleDragEnd(event) {
+    event.target.style.opacity = '1';
+    draggedElement = null;
+    draggedData = null;
+    
+    // Remover todas as classes de drop zone
+    document.querySelectorAll('.supplier-card').forEach(card => {
+        card.classList.remove('drag-over');
+    });
+}
+
+function handleDragOver(event) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+}
+
+function handleDragEnter(event) {
+    event.preventDefault();
+    const supplierCard = event.currentTarget;
+    supplierCard.classList.add('drag-over');
+}
+
+function handleDragLeave(event) {
+    const supplierCard = event.currentTarget;
+    // Só remove a classe se realmente saiu do card (não apenas de um filho)
+    if (!supplierCard.contains(event.relatedTarget)) {
+        supplierCard.classList.remove('drag-over');
+    }
+}
+
+function handleDrop(event) {
+    event.preventDefault();
+    const supplierCard = event.currentTarget;
+    const newSupplier = supplierCard.dataset.supplier;
+    
+    supplierCard.classList.remove('drag-over');
+    
+    if (!draggedData) return;
+    
+    console.log(`Movendo ${draggedData.product} de ${draggedData.supplier} para ${newSupplier}`);
+    
+    // Encontrar o novo preço para este produto neste fornecedor
+    const savedData = localStorage.getItem('canaverdeData');
+    if (!savedData) return;
+    
+    try {
+        const data = JSON.parse(savedData);
+        
+        // Encontrar o item com o novo preço
+        const newPriceItem = data.data.find(item => 
+            item.product === draggedData.product && item.supplier === newSupplier
+        );
+        
+        if (!newPriceItem) {
+            console.error('Preço não encontrado para o novo fornecedor');
+            return;
+        }
+        
+        // Atualizar os dados
+        updateProductSupplier(data, draggedData.product, draggedData.supplier, newSupplier, newPriceItem.price);
+        
+        // Recriar a interface mantendo a ordem
+        createSupplierCards(data);
+        updateStats(data);
+        
+        console.log(`Produto movido com sucesso! Novo preço: R$ ${newPriceItem.price.toFixed(2)}`);
+        
+    } catch (error) {
+        console.error('Erro ao processar drop:', error);
+    }
+}
+
+function updateProductSupplier(data, productName, oldSupplier, newSupplier, newPrice) {
+    // Remover do fornecedor antigo
+    const oldItem = data.data.find(item => 
+        item.product === productName && item.supplier === oldSupplier
+    );
+    
+    // Adicionar ao novo fornecedor
+    const newItem = data.data.find(item => 
+        item.product === productName && item.supplier === newSupplier
+    );
+    
+    if (oldItem && newItem) {
+        // Transferir quantidade se existir
+        const quantity = oldItem.quantity || 0;
+        newItem.quantity = quantity;
+        
+        // Limpar quantidade do item antigo
+        oldItem.quantity = 0;
+        
+        // Atualizar menores preços
+        const lowestPricesMap = new Map(data.lowestPrices);
+        const oldKey = `${productName}-${oldSupplier}`;
+        const newKey = `${productName}-${newSupplier}`;
+        
+        // Remover do fornecedor antigo
+        lowestPricesMap.delete(oldKey);
+        
+        // Adicionar ao novo fornecedor
+        lowestPricesMap.set(newKey, newPrice);
+        
+        data.lowestPrices = Array.from(lowestPricesMap.entries());
+        
+        // Salvar dados atualizados
+        localStorage.setItem('canaverdeData', JSON.stringify(data));
+        
+        console.log(`Produto ${productName} movido de ${oldSupplier} para ${newSupplier}`);
+    }
 }
 
 // Carregar dados quando a página carregar
