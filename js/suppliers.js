@@ -103,7 +103,7 @@ function createSupplierCards(data) {
     
     console.log('Criando cards de fornecedores com dados:', data);
     
-    // Agrupar produtos por fornecedor
+    // Agrupar produtos por fornecedor - APENAS os com menores preços
     const supplierGroups = {};
     const lowestPricesMap = new Map(data.lowestPrices || []);
     
@@ -115,8 +115,10 @@ function createSupplierCards(data) {
     );
     
     console.log('Produtos com menores preços:', lowestPriceProducts);
+    console.log('Total de produtos com menores preços:', lowestPriceProducts.length);
     
-    lowestPriceProducts.forEach(item => {
+    lowestPriceProducts.forEach((item, index) => {
+        console.log(`Processando produto ${index + 1}: ${item.product} - ${item.supplier}`);
         if (!supplierGroups[item.supplier]) {
             supplierGroups[item.supplier] = [];
         }
@@ -124,6 +126,7 @@ function createSupplierCards(data) {
     });
     
     console.log('Grupos de fornecedores (apenas menores preços):', supplierGroups);
+    console.log('Total de grupos:', Object.keys(supplierGroups).length);
     
     // Se não há fornecedores, mostrar mensagem
     if (Object.keys(supplierGroups).length === 0) {
@@ -143,8 +146,10 @@ function createSupplierCards(data) {
         const products = supplierGroups[supplier];
         
         console.log(`Fornecedor: ${supplier}, Produtos com menor preço: ${products.length}`);
+        console.log(`Produtos do fornecedor ${supplier}:`, products.map(p => p.product));
         
-        const productsHtml = products.map(product => {
+        const productsHtml = products.map((product, index) => {
+            console.log(`Renderizando produto ${index + 1}/${products.length}: ${product.product}`);
             const quantity = product.quantity || 0;
             const totalPrice = product.price * quantity;
             
@@ -301,22 +306,33 @@ let draggedData = null;
 
 // Funções de drag and drop
 function handleDragStart(event) {
-    draggedElement = event.target;
+    // Encontrar o elemento product-item (container do produto)
+    const productItem = event.target.closest('.product-item');
+    if (!productItem) {
+        console.error('Elemento product-item não encontrado');
+        return;
+    }
+    
+    draggedElement = productItem;
     draggedData = {
-        product: event.target.dataset.product,
-        supplier: event.target.dataset.supplier,
-        unitPrice: parseFloat(event.target.dataset.unitPrice)
+        product: productItem.dataset.product,
+        supplier: productItem.dataset.supplier,
+        unitPrice: parseFloat(productItem.dataset.unitPrice)
     };
     
-    event.target.style.opacity = '0.5';
-    event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('text/html', event.target.outerHTML);
-    
     console.log('Iniciando drag:', draggedData);
+    console.log('Elemento sendo arrastado:', productItem);
+    
+    productItem.style.opacity = '0.5';
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', JSON.stringify(draggedData));
+    event.dataTransfer.setData('text/html', productItem.outerHTML);
 }
 
 function handleDragEnd(event) {
-    event.target.style.opacity = '1';
+    if (draggedElement) {
+        draggedElement.style.opacity = '1';
+    }
     draggedElement = null;
     draggedData = null;
     
@@ -329,19 +345,22 @@ function handleDragEnd(event) {
 function handleDragOver(event) {
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
+    console.log('Drag over fornecedor:', event.currentTarget.dataset.supplier);
 }
 
 function handleDragEnter(event) {
     event.preventDefault();
     const supplierCard = event.currentTarget;
     supplierCard.classList.add('drag-over');
+    console.log('Drag enter fornecedor:', supplierCard.dataset.supplier);
 }
 
 function handleDragLeave(event) {
     const supplierCard = event.currentTarget;
-    // Só remove a classe se realmente saiu do card (não apenas de um filho)
+    // Verificar se realmente saiu do card
     if (!supplierCard.contains(event.relatedTarget)) {
         supplierCard.classList.remove('drag-over');
+        console.log('Drag leave fornecedor:', supplierCard.dataset.supplier);
     }
 }
 
@@ -350,11 +369,29 @@ function handleDrop(event) {
     const supplierCard = event.currentTarget;
     const newSupplier = supplierCard.dataset.supplier;
     
+    console.log('=== DROP EVENT TRIGGERED ===');
+    console.log('Novo fornecedor:', newSupplier);
+    console.log('Dados do produto arrastado (global):', draggedData);
+    
     supplierCard.classList.remove('drag-over');
     
-    if (!draggedData) return;
+    if (!draggedData) {
+        console.error('❌ Nenhum dado de drag encontrado!');
+        return;
+    }
     
     console.log(`Movendo ${draggedData.product} de ${draggedData.supplier} para ${newSupplier}`);
+    console.log('Fornecedor atual:', draggedData.supplier);
+    console.log('Novo fornecedor:', newSupplier);
+    console.log('São diferentes?', draggedData.supplier !== newSupplier);
+    
+    // Verificar se não está tentando mover para o mesmo fornecedor
+    if (draggedData.supplier === newSupplier) {
+        console.log('❌ Tentativa de mover para o mesmo fornecedor, ignorando...');
+        return;
+    }
+    
+    console.log('✅ Fornecedores diferentes, prosseguindo...');
     
     // Encontrar o novo preço para este produto neste fornecedor
     const savedData = localStorage.getItem('canaverdeData');
@@ -362,32 +399,81 @@ function handleDrop(event) {
     
     try {
         const data = JSON.parse(savedData);
+        console.log('Dados carregados do localStorage:', data);
         
-        // Encontrar o item com o novo preço
-        const newPriceItem = data.data.find(item => 
+        // Encontrar o item com o novo preço - busca mais robusta
+        console.log('Procurando produto:', draggedData.product);
+        console.log('No fornecedor:', newSupplier);
+        
+        // Buscar por nome exato primeiro
+        let newPriceItem = data.data.find(item => 
             item.product === draggedData.product && item.supplier === newSupplier
         );
         
+        // Se não encontrar, buscar por similaridade (caso haja diferenças de espaços, etc.)
         if (!newPriceItem) {
-            console.error('Preço não encontrado para o novo fornecedor');
-            return;
+            console.log('Busca exata falhou, tentando busca por similaridade...');
+            newPriceItem = data.data.find(item => 
+                item.product.trim() === draggedData.product.trim() && 
+                item.supplier.trim() === newSupplier.trim()
+            );
         }
+        
+        console.log('Item encontrado no novo fornecedor:', newPriceItem);
+        
+        if (!newPriceItem) {
+            console.log(`⚠️ Produto ${draggedData.product} não encontrado no fornecedor ${newSupplier}`);
+            console.log('Produtos disponíveis no fornecedor:', data.data.filter(item => item.supplier === newSupplier));
+            
+            // Tentar encontrar o produto em qualquer fornecedor para debug
+            const productInAnySupplier = data.data.find(item => item.product === draggedData.product);
+            console.log('Produto encontrado em outro fornecedor:', productInAnySupplier);
+            
+            // Se o produto não existe no fornecedor de destino, criar um novo item
+            console.log('🔄 Criando novo item para o fornecedor de destino...');
+            
+            // Encontrar o preço mais próximo ou usar o preço atual
+            const newPrice = draggedData.unitPrice; // Usar o preço atual como base
+            
+            // Criar novo item para o fornecedor de destino
+            const newItem = {
+                product: draggedData.product,
+                supplier: newSupplier,
+                price: newPrice,
+                quantity: 0,
+                totalPrice: 0
+            };
+            
+            // Adicionar o novo item aos dados
+            data.data.push(newItem);
+            console.log('✅ Novo item criado:', newItem);
+            
+            // Usar o novo item como newPriceItem
+            newPriceItem = newItem;
+        }
+        
+        console.log('✅ Produto encontrado! Prosseguindo com a atualização...');
         
         // Atualizar os dados
         updateProductSupplier(data, draggedData.product, draggedData.supplier, newSupplier, newPriceItem.price);
         
         // Recriar a interface mantendo a ordem
+        console.log('🔄 Recriando interface com dados atualizados...');
         createSupplierCards(data);
         updateStats(data);
         
-        console.log(`Produto movido com sucesso! Novo preço: R$ ${newPriceItem.price.toFixed(2)}`);
+        console.log(`✅ Produto movido com sucesso! Novo preço: R$ ${newPriceItem.price.toFixed(2)}`);
+        console.log('Total de produtos após movimentação:', data.data.length);
         
     } catch (error) {
-        console.error('Erro ao processar drop:', error);
+        console.error('❌ Erro ao processar drop:', error);
+        console.error('Stack trace:', error.stack);
     }
 }
 
 function updateProductSupplier(data, productName, oldSupplier, newSupplier, newPrice) {
+    console.log(`Atualizando produto: ${productName} de ${oldSupplier} para ${newSupplier}`);
+    
     // Remover do fornecedor antigo
     const oldItem = data.data.find(item => 
         item.product === productName && item.supplier === oldSupplier
@@ -398,6 +484,9 @@ function updateProductSupplier(data, productName, oldSupplier, newSupplier, newP
         item.product === productName && item.supplier === newSupplier
     );
     
+    console.log('Item antigo encontrado:', oldItem);
+    console.log('Item novo encontrado:', newItem);
+    
     if (oldItem && newItem) {
         // Transferir quantidade se existir
         const quantity = oldItem.quantity || 0;
@@ -406,10 +495,15 @@ function updateProductSupplier(data, productName, oldSupplier, newSupplier, newP
         // Limpar quantidade do item antigo
         oldItem.quantity = 0;
         
+        console.log(`Quantidade transferida: ${quantity}`);
+        
         // Atualizar menores preços
         const lowestPricesMap = new Map(data.lowestPrices);
         const oldKey = `${productName}-${oldSupplier}`;
         const newKey = `${productName}-${newSupplier}`;
+        
+        console.log('Chaves de menores preços:', { oldKey, newKey });
+        console.log('Mapa antes da atualização:', lowestPricesMap);
         
         // Remover do fornecedor antigo
         lowestPricesMap.delete(oldKey);
@@ -417,12 +511,15 @@ function updateProductSupplier(data, productName, oldSupplier, newSupplier, newP
         // Adicionar ao novo fornecedor
         lowestPricesMap.set(newKey, newPrice);
         
+        console.log('Mapa após atualização:', lowestPricesMap);
+        
         data.lowestPrices = Array.from(lowestPricesMap.entries());
         
         // Salvar dados atualizados
         localStorage.setItem('canaverdeData', JSON.stringify(data));
         
         console.log(`Produto ${productName} movido de ${oldSupplier} para ${newSupplier}`);
+        console.log('Dados salvos no localStorage');
     }
 }
 
