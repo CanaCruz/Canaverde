@@ -218,6 +218,10 @@ function createSupplierCards(data) {
                 <div class="products-list">
                     ${productsHtml}
                 </div>
+                <button class="copy-btn" onclick="copySupplierText('${supplier}')">
+                    <i class="fas fa-copy"></i>
+                    Copiar Lista para WhatsApp
+                </button>
             </div>
         `;
     }).join('');
@@ -521,6 +525,285 @@ function updateProductSupplier(data, productName, oldSupplier, newSupplier, newP
         console.log(`Produto ${productName} movido de ${oldSupplier} para ${newSupplier}`);
         console.log('Dados salvos no localStorage');
     }
+}
+
+// Função para copiar texto do fornecedor formatado para WhatsApp
+function copySupplierText(supplierName) {
+    console.log(`Copiando texto do fornecedor: ${supplierName}`);
+    
+    // Encontrar o card do fornecedor
+    const supplierCard = document.querySelector(`[data-supplier="${supplierName}"]`);
+    if (!supplierCard) {
+        console.error('Card do fornecedor não encontrado');
+        return;
+    }
+    
+    // Coletar dados dos produtos
+    const products = supplierCard.querySelectorAll('.product-item');
+    const supplierStats = supplierCard.querySelectorAll('.supplier-stat');
+    
+    // Formatar texto para WhatsApp
+    let whatsappText = `🛒 *${supplierName}*\n\n`;
+    
+    // Adicionar estatísticas do fornecedor
+    if (supplierStats.length >= 2) {
+        const totalProducts = supplierStats[0].querySelector('.supplier-stat-number').textContent;
+        const totalValue = supplierStats[1].querySelector('.supplier-stat-number').textContent;
+        whatsappText += `📊 *Estatísticas:*\n`;
+        whatsappText += `• Produtos: ${totalProducts}\n`;
+        whatsappText += `• Valor Total: ${totalValue}\n\n`;
+    }
+    
+    // Adicionar lista de produtos
+    whatsappText += `📋 *Lista de Produtos:*\n`;
+    
+    let hasProducts = false;
+    products.forEach((product, index) => {
+        const productName = product.querySelector('.product-name').textContent;
+        const quantityInput = product.querySelector('.quantity-input-supplier');
+        const unitPrice = product.querySelector('.product-detail-value').textContent;
+        
+        const quantity = quantityInput.value || '0';
+        const unitPriceClean = unitPrice.replace('R$ ', '').replace(',', '.');
+        const totalPrice = (parseFloat(unitPriceClean) * parseInt(quantity)).toFixed(2).replace('.', ',');
+        
+        whatsappText += `${index + 1}. *${productName}*\n`;
+        whatsappText += `   • Quantidade: ${quantity}\n`;
+        whatsappText += `   • Preço Unit.: ${unitPrice}\n`;
+        whatsappText += `   • Total: R$ ${totalPrice}\n\n`;
+        
+        hasProducts = true;
+    });
+    
+    if (!hasProducts) {
+        whatsappText += `Nenhum produto com quantidade definida.\n\n`;
+    }
+    
+    // Adicionar rodapé
+    whatsappText += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    whatsappText += `📱 *Mercado Canaverde - Sistema de Análise de Preços*\n`;
+    whatsappText += `🕒 Gerado em: ${new Date().toLocaleString('pt-BR')}`;
+    
+    // Copiar para área de transferência
+    navigator.clipboard.writeText(whatsappText).then(() => {
+        console.log('Texto copiado com sucesso!');
+        
+        // Feedback visual
+        const button = supplierCard.querySelector('.copy-btn');
+        const originalText = button.innerHTML;
+        
+        button.classList.add('copied');
+        button.innerHTML = '<i class="fas fa-check"></i> Copiado!';
+        
+        // Restaurar botão após 2 segundos
+        setTimeout(() => {
+            button.classList.remove('copied');
+            button.innerHTML = originalText;
+        }, 2000);
+        
+        // Mostrar notificação
+        showNotification('✅ Lista copiada para área de transferência!', 'success');
+        
+    }).catch(err => {
+        console.error('Erro ao copiar texto:', err);
+        
+        // Fallback: mostrar texto em modal
+        showTextModal(whatsappText, supplierName);
+    });
+}
+
+// Função para mostrar notificação
+function showNotification(message, type = 'info') {
+    // Remover notificação anterior se existir
+    const existingNotification = document.querySelector('.notification');
+    if (existingNotification) {
+        existingNotification.remove();
+    }
+    
+    // Criar nova notificação
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    notification.innerHTML = `
+        <div class="notification-content">
+            <i class="fas fa-${type === 'success' ? 'check-circle' : 'info-circle'}"></i>
+            <span>${message}</span>
+        </div>
+    `;
+    
+    // Adicionar estilos inline para a notificação
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: ${type === 'success' ? '#28a745' : '#17a2b8'};
+        color: white;
+        padding: 15px 20px;
+        border-radius: 10px;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        z-index: 10000;
+        animation: slideInRight 0.3s ease-out;
+        max-width: 400px;
+    `;
+    
+    // Adicionar animação CSS
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes slideInRight {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        .notification-content {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .notification-content i {
+            font-size: 1.2rem;
+        }
+    `;
+    document.head.appendChild(style);
+    
+    document.body.appendChild(notification);
+    
+    // Remover após 3 segundos
+    setTimeout(() => {
+        notification.style.animation = 'slideInRight 0.3s ease-out reverse';
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 300);
+    }, 3000);
+}
+
+// Função para mostrar texto em modal (fallback)
+function showTextModal(text, supplierName) {
+    // Remover modal anterior se existir
+    const existingModal = document.querySelector('.text-modal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Criar modal
+    const modal = document.createElement('div');
+    modal.className = 'text-modal';
+    modal.innerHTML = `
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>📋 Lista do Fornecedor: ${supplierName}</h3>
+                <button class="modal-close" onclick="this.closest('.text-modal').remove()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <textarea readonly>${text}</textarea>
+                <div class="modal-actions">
+                    <button class="btn" onclick="copyTextFromModal(this)">
+                        <i class="fas fa-copy"></i> Copiar Texto
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Adicionar estilos inline para o modal
+    modal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+    `;
+    
+    const modalContent = modal.querySelector('.modal-content');
+    modalContent.style.cssText = `
+        background: white;
+        border-radius: 15px;
+        max-width: 600px;
+        width: 90%;
+        max-height: 80%;
+        overflow: hidden;
+        box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+    `;
+    
+    const modalHeader = modal.querySelector('.modal-header');
+    modalHeader.style.cssText = `
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    `;
+    
+    const modalBody = modal.querySelector('.modal-body');
+    modalBody.style.cssText = `
+        padding: 20px;
+    `;
+    
+    const textarea = modal.querySelector('textarea');
+    textarea.style.cssText = `
+        width: 100%;
+        height: 300px;
+        border: 2px solid #e0e0e0;
+        border-radius: 10px;
+        padding: 15px;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        font-size: 14px;
+        line-height: 1.5;
+        resize: vertical;
+        margin-bottom: 15px;
+    `;
+    
+    const modalActions = modal.querySelector('.modal-actions');
+    modalActions.style.cssText = `
+        text-align: center;
+    `;
+    
+    const closeBtn = modal.querySelector('.modal-close');
+    closeBtn.style.cssText = `
+        background: none;
+        border: none;
+        color: white;
+        font-size: 1.5rem;
+        cursor: pointer;
+        padding: 5px;
+    `;
+    
+    document.body.appendChild(modal);
+    
+    // Fechar modal ao clicar fora
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            modal.remove();
+        }
+    });
+}
+
+// Função para copiar texto do modal
+function copyTextFromModal(button) {
+    const modal = button.closest('.text-modal');
+    const textarea = modal.querySelector('textarea');
+    
+    textarea.select();
+    document.execCommand('copy');
+    
+    // Feedback visual
+    const originalText = button.innerHTML;
+    button.innerHTML = '<i class="fas fa-check"></i> Copiado!';
+    button.style.background = '#28a745';
+    
+    setTimeout(() => {
+        button.innerHTML = originalText;
+        button.style.background = '';
+    }, 2000);
+    
+    showNotification('✅ Texto copiado com sucesso!', 'success');
 }
 
 // Carregar dados quando a página carregar
