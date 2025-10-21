@@ -1182,3 +1182,46 @@ body {
 .copy-btn.copied i::before {
     content: "\f00c";
 }
+
+/* Checkbox Styles */
+.supplier-finished {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 15px;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 10px;
+    border: 2px solid #e9ecef;
+    transition: all 0.3s ease;
+}
+
+.supplier-finished:hover {
+    background: #e9ecef;
+    border-color: #667eea;
+}
+
+.supplier-finished input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: #28a745;
+    cursor: pointer;
+}
+
+.supplier-finished label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #495057;
+    cursor: pointer;
+    user-select: none;
+    flex: 1;
+}
+
+.supplier-finished.checked {
+    background: #d4edda;
+    border-color: #28a745;
+}
+
+.supplier-finished.checked label {
+    color: #155724;
+}

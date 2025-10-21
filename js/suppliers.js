@@ -209,10 +209,6 @@ function createSupplierCards(data) {
                             <div class="supplier-stat-number">${products.length}</div>
                             <div class="supplier-stat-label">Menores Preços</div>
                         </div>
-                        <div class="supplier-stat">
-                            <div class="supplier-stat-number">R$ ${products.reduce((sum, p) => sum + (p.price * (p.quantity || 0)), 0).toFixed(2).replace('.', ',')}</div>
-                            <div class="supplier-stat-label">Valor Total</div>
-                        </div>
                     </div>
                 </div>
                 <div class="products-list">
@@ -222,11 +218,21 @@ function createSupplierCards(data) {
                     <i class="fas fa-copy"></i>
                     Copiar Lista para WhatsApp
                 </button>
+                <div class="supplier-finished" id="finished-${supplier.replace(/\s+/g, '-')}">
+                    <input type="checkbox" id="checkbox-${supplier.replace(/\s+/g, '-')}" 
+                           onchange="toggleSupplierFinished('${supplier}')">
+                    <label for="checkbox-${supplier.replace(/\s+/g, '-')}">
+                        Marcar como finalizado
+                    </label>
+                </div>
             </div>
         `;
     }).join('');
     
     container.innerHTML = suppliersHtml;
+    
+    // Restaurar estado dos checkboxes
+    restoreCheckboxStates();
     
     // Atualizar estatísticas após criar os cards
     updateSupplierStats();
@@ -249,26 +255,9 @@ function updateSupplierQuantity(input) {
 
 // Função para atualizar estatísticas do fornecedor
 function updateSupplierStats() {
-    const supplierCards = document.querySelectorAll('.supplier-card');
-    
-    supplierCards.forEach(card => {
-        const products = card.querySelectorAll('.product-item');
-        let totalValue = 0;
-        
-        products.forEach(product => {
-            const quantityInput = product.querySelector('.quantity-input-supplier');
-            const unitPrice = parseFloat(quantityInput.dataset.unitPrice) || 0;
-            const quantity = parseInt(quantityInput.value) || 0;
-            const totalPrice = unitPrice * quantity;
-            totalValue += totalPrice;
-        });
-        
-        // Atualizar valor total no cabeçalho do fornecedor
-        const valueStat = card.querySelector('.supplier-stat:last-child .supplier-stat-number');
-        if (valueStat) {
-            valueStat.textContent = `R$ ${totalValue.toFixed(2).replace('.', ',')}`;
-        }
-    });
+    // Função simplificada - não precisa mais calcular valor total
+    // As estatísticas são atualizadas automaticamente na criação dos cards
+    console.log('Estatísticas dos fornecedores atualizadas');
 }
 
 // Função para salvar dados atualizados
@@ -546,12 +535,10 @@ function copySupplierText(supplierName) {
     let whatsappText = `🛒 *${supplierName}*\n\n`;
     
     // Adicionar estatísticas do fornecedor
-    if (supplierStats.length >= 2) {
+    if (supplierStats.length >= 1) {
         const totalProducts = supplierStats[0].querySelector('.supplier-stat-number').textContent;
-        const totalValue = supplierStats[1].querySelector('.supplier-stat-number').textContent;
         whatsappText += `📊 *Estatísticas:*\n`;
-        whatsappText += `• Produtos: ${totalProducts}\n`;
-        whatsappText += `• Valor Total: ${totalValue}\n\n`;
+        whatsappText += `• Produtos: ${totalProducts}\n\n`;
     }
     
     // Adicionar lista de produtos
@@ -564,13 +551,13 @@ function copySupplierText(supplierName) {
         const unitPrice = product.querySelector('.product-detail-value').textContent;
         
         const quantity = quantityInput.value || '0';
-        const unitPriceClean = unitPrice.replace('R$ ', '').replace(',', '.');
-        const totalPrice = (parseFloat(unitPriceClean) * parseInt(quantity)).toFixed(2).replace('.', ',');
+        
+        // Limpar completamente o preço e reconstruir
+        const cleanPrice = unitPrice.replace(/\s+/g, ' ').trim();
         
         whatsappText += `${index + 1}. *${productName}*\n`;
-        whatsappText += `   • Quantidade: ${quantity}\n`;
-        whatsappText += `   • Preço Unit.: ${unitPrice}\n`;
-        whatsappText += `   • Total: R$ ${totalPrice}\n\n`;
+        whatsappText += `   • Quantidade: ${quantity} cx\n`;
+        whatsappText += `   • Preço Unit.: ${cleanPrice}\n\n\n`;
         
         hasProducts = true;
     });
@@ -578,11 +565,6 @@ function copySupplierText(supplierName) {
     if (!hasProducts) {
         whatsappText += `Nenhum produto com quantidade definida.\n\n`;
     }
-    
-    // Adicionar rodapé
-    whatsappText += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-    whatsappText += `📱 *Mercado Canaverde - Sistema de Análise de Preços*\n`;
-    whatsappText += `🕒 Gerado em: ${new Date().toLocaleString('pt-BR')}`;
     
     // Copiar para área de transferência
     navigator.clipboard.writeText(whatsappText).then(() => {
@@ -804,6 +786,57 @@ function copyTextFromModal(button) {
     }, 2000);
     
     showNotification('✅ Texto copiado com sucesso!', 'success');
+}
+
+// Função para alternar estado do checkbox de fornecedor finalizado
+function toggleSupplierFinished(supplierName) {
+    const checkboxId = `checkbox-${supplierName.replace(/\s+/g, '-')}`;
+    const checkbox = document.getElementById(checkboxId);
+    const finishedDiv = document.getElementById(`finished-${supplierName.replace(/\s+/g, '-')}`);
+    
+    if (checkbox && finishedDiv) {
+        const isChecked = checkbox.checked;
+        
+        // Atualizar visual
+        if (isChecked) {
+            finishedDiv.classList.add('checked');
+        } else {
+            finishedDiv.classList.remove('checked');
+        }
+        
+        // Salvar estado no localStorage
+        saveCheckboxState(supplierName, isChecked);
+        
+        // Mostrar notificação
+        const message = isChecked ? '✅ Fornecedor marcado como finalizado!' : '📝 Fornecedor desmarcado';
+        showNotification(message, 'success');
+    }
+}
+
+// Função para salvar estado dos checkboxes
+function saveCheckboxState(supplierName, isFinished) {
+    const finishedSuppliers = JSON.parse(localStorage.getItem('finishedSuppliers') || '{}');
+    finishedSuppliers[supplierName] = isFinished;
+    localStorage.setItem('finishedSuppliers', JSON.stringify(finishedSuppliers));
+    console.log(`Estado do fornecedor ${supplierName} salvo: ${isFinished}`);
+}
+
+// Função para restaurar estado dos checkboxes
+function restoreCheckboxStates() {
+    const finishedSuppliers = JSON.parse(localStorage.getItem('finishedSuppliers') || '{}');
+    
+    Object.keys(finishedSuppliers).forEach(supplierName => {
+        const checkboxId = `checkbox-${supplierName.replace(/\s+/g, '-')}`;
+        const checkbox = document.getElementById(checkboxId);
+        const finishedDiv = document.getElementById(`finished-${supplierName.replace(/\s+/g, '-')}`);
+        
+        if (checkbox && finishedDiv && finishedSuppliers[supplierName]) {
+            checkbox.checked = true;
+            finishedDiv.classList.add('checked');
+        }
+    });
+    
+    console.log('Estados dos checkboxes restaurados:', finishedSuppliers);
 }
 
 // Carregar dados quando a página carregar
