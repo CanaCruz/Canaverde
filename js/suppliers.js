@@ -303,6 +303,37 @@ function saveUpdatedData() {
 // Variáveis globais para drag and drop
 let draggedElement = null;
 let draggedData = null;
+let scrollInterval = null;
+let isDragging = false;
+
+// Função para scroll automático durante o drag
+function startAutoScroll() {
+    if (scrollInterval) return;
+    
+    scrollInterval = setInterval(() => {
+        if (!isDragging) return;
+        
+        const mouseY = window.mouseY || 0;
+        const windowHeight = window.innerHeight;
+        const scrollThreshold = 100; // pixels da borda para iniciar scroll
+        
+        // Scroll para baixo se o mouse estiver próximo da borda inferior
+        if (mouseY > windowHeight - scrollThreshold) {
+            window.scrollBy(0, 10);
+        }
+        // Scroll para cima se o mouse estiver próximo da borda superior
+        else if (mouseY < scrollThreshold) {
+            window.scrollBy(0, -10);
+        }
+    }, 16); // ~60fps
+}
+
+function stopAutoScroll() {
+    if (scrollInterval) {
+        clearInterval(scrollInterval);
+        scrollInterval = null;
+    }
+}
 
 // Funções de drag and drop
 function handleDragStart(event) {
@@ -327,6 +358,10 @@ function handleDragStart(event) {
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('text/plain', JSON.stringify(draggedData));
     event.dataTransfer.setData('text/html', productItem.outerHTML);
+    
+    // Iniciar scroll automático
+    isDragging = true;
+    startAutoScroll();
 }
 
 function handleDragEnd(event) {
@@ -335,6 +370,10 @@ function handleDragEnd(event) {
     }
     draggedElement = null;
     draggedData = null;
+    
+    // Parar scroll automático
+    isDragging = false;
+    stopAutoScroll();
     
     // Remover todas as classes de drop zone
     document.querySelectorAll('.supplier-card').forEach(card => {
@@ -845,6 +884,11 @@ function restoreCheckboxStates() {
     
     console.log('Estados dos checkboxes restaurados:', finishedSuppliers);
 }
+
+// Rastrear posição do mouse para scroll automático
+document.addEventListener('mousemove', (event) => {
+    window.mouseY = event.clientY;
+});
 
 // Carregar dados quando a página carregar
 document.addEventListener('DOMContentLoaded', () => {
