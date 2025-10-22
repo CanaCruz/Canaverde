@@ -10,6 +10,8 @@ body {
     min-height: 100vh;
     color: #1b3d0a;
     position: relative;
+    overflow-x: hidden;
+    overflow-y: auto;
 }
 
 body::before {
@@ -31,6 +33,8 @@ body::before {
     max-width: 1400px;
     margin: 0 auto;
     padding: 20px;
+    min-height: 100vh;
+    overflow-y: auto;
 }
 
 /* Header */
