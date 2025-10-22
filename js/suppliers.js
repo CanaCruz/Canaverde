@@ -109,10 +109,17 @@ function createSupplierCards(data) {
     
     console.log('Mapa de menores preços:', lowestPricesMap);
     
-    // Filtrar apenas produtos com menores preços
-    const lowestPriceProducts = data.data.filter(item => 
-        lowestPricesMap.has(`${item.product}-${item.supplier}`)
-    );
+    // Filtrar apenas produtos com menores preços e garantir unicidade
+    const lowestPriceProducts = [];
+    const processedProducts = new Set();
+    
+    data.data.forEach(item => {
+        const productKey = `${item.product}-${item.supplier}`;
+        if (lowestPricesMap.has(productKey) && !processedProducts.has(item.product)) {
+            lowestPriceProducts.push(item);
+            processedProducts.add(item.product);
+        }
+    });
     
     console.log('Produtos com menores preços:', lowestPriceProducts);
     console.log('Total de produtos com menores preços:', lowestPriceProducts.length);
