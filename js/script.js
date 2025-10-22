@@ -473,11 +473,15 @@ class PriceAnalyzer {
             const items = productGroups[product];
             const minPrice = Math.min(...items.map(item => item.price));
             
-            items.forEach(item => {
-                if (item.price === minPrice) {
-                    this.lowestPrices.set(`${item.product}-${item.supplier}`, true);
-                }
-            });
+            // CORRIGIDO: Pegar apenas o PRIMEIRO fornecedor com menor preço para evitar empates
+            // Ordenar por nome do fornecedor para garantir consistência
+            const itemsWithMinPrice = items.filter(item => item.price === minPrice);
+            const sortedItems = itemsWithMinPrice.sort((a, b) => a.supplier.localeCompare(b.supplier));
+            const selectedItem = sortedItems[0];
+            
+            if (selectedItem) {
+                this.lowestPrices.set(`${selectedItem.product}-${selectedItem.supplier}`, true);
+            }
         });
     }
 
