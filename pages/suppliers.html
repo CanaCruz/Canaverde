@@ -58,6 +58,22 @@
                 <p>Carregue uma planilha Excel na página principal para visualizar os produtos por fornecedor.</p>
             </div>
         </div>
+
+        <div id="removedProductsSection" class="removed-products-section" style="display: none;">
+            <div class="removed-products-header">
+                <h3>
+                    <i class="fas fa-trash-alt"></i>
+                    Produtos Removidos
+                </h3>
+                <button class="toggle-removed-btn" onclick="toggleRemovedProducts()">
+                    <i class="fas fa-eye"></i>
+                    <span id="toggleRemovedText">Mostrar</span>
+                </button>
+            </div>
+            <div id="removedProductsContainer" class="removed-products-container" style="display: none;">
+                <!-- Produtos removidos serão inseridos aqui -->
+            </div>
+        </div>
     </div>
 
     <script src="../js/suppliers.js"></script>
