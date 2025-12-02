@@ -50,6 +50,9 @@ function loadSuppliersData() {
         // Criar cards de fornecedores
         createSupplierCards(data);
         
+        // Atualizar seção de produtos removidos
+        updateRemovedProductsSection();
+        
     } catch (error) {
         console.error('Erro ao carregar dados:', error);
         showNoDataMessage();
@@ -172,7 +175,14 @@ function createSupplierCards(data) {
                      ondragend="handleDragEnd(event)">
                     <div class="product-header">
                         <span class="product-name">${product.product}</span>
-                        <span class="drag-handle">⋮⋮</span>
+                        <div class="product-actions">
+                            <span class="drag-handle">⋮⋮</span>
+                            <button class="remove-product-btn" 
+                                    onclick="removeProduct('${product.product}', '${product.supplier}')"
+                                    title="Remover produto">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
                     </div>
                     <div class="product-details">
                         <div class="product-detail">
@@ -612,6 +622,9 @@ function copySupplierText(supplierName) {
         whatsappText += `Nenhum produto com quantidade definida.\n\n`;
     }
     
+    // Adicionar mensagem final
+    whatsappText += `\nBoa Tarde\n\nSegue pedido Canaverde`;
+    
     // Copiar para área de transferência
     navigator.clipboard.writeText(whatsappText).then(() => {
         console.log('Texto copiado com sucesso!');
@@ -653,17 +666,20 @@ function showNotification(message, type = 'info') {
     notification.className = `notification notification-${type}`;
     notification.innerHTML = `
         <div class="notification-content">
-            <i class="fas fa-${type === 'success' ? 'check-circle' : 'info-circle'}"></i>
+            <i class="fas fa-info-circle"></i>
             <span>${message}</span>
         </div>
     `;
     
     // Adicionar estilos inline para a notificação
+    const bgColor = type === 'success' ? '#28a745' : type === 'error' ? '#dc3545' : '#17a2b8';
+    const icon = type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle';
+    
     notification.style.cssText = `
         position: fixed;
         top: 20px;
         right: 20px;
-        background: ${type === 'success' ? '#28a745' : '#17a2b8'};
+        background: ${bgColor};
         color: white;
         padding: 15px 20px;
         border-radius: 10px;
@@ -672,6 +688,12 @@ function showNotification(message, type = 'info') {
         animation: slideInRight 0.3s ease-out;
         max-width: 400px;
     `;
+    
+    // Atualizar ícone
+    const iconElement = notification.querySelector('i');
+    if (iconElement) {
+        iconElement.className = `fas fa-${icon}`;
+    }
     
     // Adicionar animação CSS
     const style = document.createElement('style');
@@ -885,6 +907,203 @@ function restoreCheckboxStates() {
     console.log('Estados dos checkboxes restaurados:', finishedSuppliers);
 }
 
+// Função para remover produto
+function removeProduct(productName, supplierName) {
+    console.log(`Removendo produto: ${productName} do fornecedor: ${supplierName}`);
+    
+    // Confirmar remoção
+    if (!confirm(`Deseja remover "${productName}" do fornecedor "${supplierName}"?`)) {
+        return;
+    }
+    
+    const savedData = localStorage.getItem('canaverdeData');
+    if (!savedData) return;
+    
+    try {
+        const data = JSON.parse(savedData);
+        
+        // Encontrar o item a ser removido
+        const itemToRemove = data.data.find(item => 
+            item.product === productName && item.supplier === supplierName
+        );
+        
+        if (!itemToRemove) {
+            console.error('Produto não encontrado para remoção');
+            return;
+        }
+        
+        // Salvar produto removido
+        const removedProducts = JSON.parse(localStorage.getItem('removedProducts') || '[]');
+        removedProducts.push({
+            product: productName,
+            supplier: supplierName,
+            price: itemToRemove.price,
+            quantity: itemToRemove.quantity || 0,
+            removedAt: new Date().toISOString()
+        });
+        localStorage.setItem('removedProducts', JSON.stringify(removedProducts));
+        
+        // Remover do mapa de menores preços
+        const lowestPricesMap = new Map(data.lowestPrices || []);
+        const keyToRemove = `${productName}-${supplierName}`;
+        lowestPricesMap.delete(keyToRemove);
+        data.lowestPrices = Array.from(lowestPricesMap.entries());
+        
+        // Salvar dados atualizados
+        localStorage.setItem('canaverdeData', JSON.stringify(data));
+        
+        // Recriar interface
+        createSupplierCards(data);
+        updateStats(data);
+        
+        // Atualizar seção de produtos removidos
+        updateRemovedProductsSection();
+        
+        // Mostrar notificação
+        showNotification(`✅ Produto "${productName}" removido com sucesso!`, 'success');
+        
+    } catch (error) {
+        console.error('Erro ao remover produto:', error);
+        showNotification('❌ Erro ao remover produto', 'error');
+    }
+}
+
+// Função para atualizar seção de produtos removidos
+function updateRemovedProductsSection() {
+    const removedProducts = JSON.parse(localStorage.getItem('removedProducts') || '[]');
+    const section = document.getElementById('removedProductsSection');
+    const container = document.getElementById('removedProductsContainer');
+    
+    if (!section || !container) return;
+    
+    if (removedProducts.length === 0) {
+        section.style.display = 'none';
+        return;
+    }
+    
+    section.style.display = 'block';
+    
+    // Agrupar por fornecedor
+    const groupedBySupplier = {};
+    removedProducts.forEach(item => {
+        if (!groupedBySupplier[item.supplier]) {
+            groupedBySupplier[item.supplier] = [];
+        }
+        groupedBySupplier[item.supplier].push(item);
+    });
+    
+    // Criar HTML
+    let html = '';
+    Object.keys(groupedBySupplier).forEach(supplier => {
+        const products = groupedBySupplier[supplier];
+        html += `
+            <div class="removed-supplier-group">
+                <div class="removed-supplier-header">
+                    <i class="fas fa-store"></i>
+                    <strong>${supplier}</strong>
+                    <span class="removed-count">${products.length} produto(s)</span>
+                </div>
+                <div class="removed-products-list">
+                    ${products.map(item => `
+                        <div class="removed-product-item">
+                            <div class="removed-product-info">
+                                <span class="removed-product-name">${item.product}</span>
+                                <span class="removed-product-price">R$ ${item.price.toFixed(2).replace('.', ',')}</span>
+                            </div>
+                            <button class="restore-product-btn" onclick="restoreProduct('${item.product}', '${item.supplier}')">
+                                <i class="fas fa-undo"></i> Restaurar
+                            </button>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+// Função para restaurar produto
+function restoreProduct(productName, supplierName) {
+    console.log(`Restaurando produto: ${productName} para fornecedor: ${supplierName}`);
+    
+    const savedData = localStorage.getItem('canaverdeData');
+    const removedProducts = JSON.parse(localStorage.getItem('removedProducts') || '[]');
+    
+    if (!savedData) return;
+    
+    try {
+        const data = JSON.parse(savedData);
+        
+        // Encontrar o produto removido
+        const removedIndex = removedProducts.findIndex(item => 
+            item.product === productName && item.supplier === supplierName
+        );
+        
+        if (removedIndex === -1) {
+            console.error('Produto removido não encontrado');
+            return;
+        }
+        
+        const removedItem = removedProducts[removedIndex];
+        
+        // Verificar se o produto já existe nos dados
+        const existingItem = data.data.find(item => 
+            item.product === productName && item.supplier === supplierName
+        );
+        
+        if (!existingItem) {
+            // Adicionar de volta aos dados
+            data.data.push({
+                product: productName,
+                supplier: supplierName,
+                price: removedItem.price,
+                quantity: removedItem.quantity || 0,
+                totalPrice: 0
+            });
+        }
+        
+        // Adicionar de volta ao mapa de menores preços
+        const lowestPricesMap = new Map(data.lowestPrices || []);
+        const keyToRestore = `${productName}-${supplierName}`;
+        lowestPricesMap.set(keyToRestore, removedItem.price);
+        data.lowestPrices = Array.from(lowestPricesMap.entries());
+        
+        // Remover da lista de produtos removidos
+        removedProducts.splice(removedIndex, 1);
+        localStorage.setItem('removedProducts', JSON.stringify(removedProducts));
+        
+        // Salvar dados atualizados
+        localStorage.setItem('canaverdeData', JSON.stringify(data));
+        
+        // Recriar interface
+        createSupplierCards(data);
+        updateStats(data);
+        
+        // Atualizar seção de produtos removidos
+        updateRemovedProductsSection();
+        
+        // Mostrar notificação
+        showNotification(`✅ Produto "${productName}" restaurado com sucesso!`, 'success');
+        
+    } catch (error) {
+        console.error('Erro ao restaurar produto:', error);
+        showNotification('❌ Erro ao restaurar produto', 'error');
+    }
+}
+
+// Função para alternar visibilidade dos produtos removidos
+function toggleRemovedProducts() {
+    const container = document.getElementById('removedProductsContainer');
+    const toggleText = document.getElementById('toggleRemovedText');
+    
+    if (!container || !toggleText) return;
+    
+    const isVisible = container.style.display !== 'none';
+    container.style.display = isVisible ? 'none' : 'block';
+    toggleText.textContent = isVisible ? 'Mostrar' : 'Ocultar';
+}
+
 // Rastrear posição do mouse para scroll automático
 document.addEventListener('mousemove', (event) => {
     window.mouseY = event.clientY;
@@ -894,4 +1113,5 @@ document.addEventListener('mousemove', (event) => {
 document.addEventListener('DOMContentLoaded', () => {
     console.log('Página de fornecedores carregada');
     loadSuppliersData();
+    updateRemovedProductsSection();
 });

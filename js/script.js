@@ -562,6 +562,16 @@ class PriceAnalyzer {
         // Criar tabela
         this.createPriceTable();
         
+        // Limpar busca se houver
+        const searchInput = document.getElementById('productSearch');
+        if (searchInput) {
+            searchInput.value = '';
+            const searchClear = document.getElementById('searchClear');
+            if (searchClear) searchClear.style.display = 'none';
+            const searchResultsInfo = document.getElementById('searchResultsInfo');
+            if (searchResultsInfo) searchResultsInfo.style.display = 'none';
+        }
+        
         // Mostrar debug info
         this.showDebugInfo();
 
@@ -630,9 +640,13 @@ class PriceAnalyzer {
                 }
             }
             
+            row.className = 'product-row';
+            row.setAttribute('data-product-name', item.product.toLowerCase());
+            row.setAttribute('data-supplier-name', item.supplier.toLowerCase());
+            
             row.innerHTML = `
-                <td>${item.product}</td>
-                <td>${item.supplier}</td>
+                <td class="product-name-cell">${item.product}</td>
+                <td class="supplier-name-cell">${item.supplier}</td>
                 <td class="${isLowest ? 'lowest-price' : ''} clickable-price" 
                     data-product="${item.product}"
                     data-supplier="${item.supplier}"
@@ -727,7 +741,6 @@ class PriceAnalyzer {
                 <div><strong>Total de itens:</strong> ${this.data.length}</div>
                 <div><strong>Menores preços:</strong> ${this.lowestPrices.size}</div>
                 <div><strong>Fornecedores:</strong> ${Array.from(this.suppliers).join(', ')}</div>
-                <div><strong>Produtos:</strong> ${Array.from(this.products).join(', ')}</div>
             `;
         }
     }
@@ -946,9 +959,142 @@ function clearAllData() {
     console.log('localStorage limpo');
 }
 
+// Função para buscar produtos na tabela
+function searchProducts() {
+    const searchInput = document.getElementById('productSearch');
+    const searchClear = document.getElementById('searchClear');
+    const searchResultsInfo = document.getElementById('searchResultsInfo');
+    const searchResultsText = document.getElementById('searchResultsText');
+    
+    if (!searchInput) return;
+    
+    const searchTerm = searchInput.value.toLowerCase().trim();
+    const tableBody = document.getElementById('tableBody');
+    
+    if (!tableBody) return;
+    
+    // Mostrar/ocultar botão de limpar
+    if (searchTerm.length > 0) {
+        searchClear.style.display = 'flex';
+    } else {
+        searchClear.style.display = 'none';
+        searchResultsInfo.style.display = 'none';
+    }
+    
+    // Buscar todas as linhas de produto (ignorar separadores)
+    const rows = tableBody.querySelectorAll('tr.product-row');
+    let visibleCount = 0;
+    let totalCount = rows.length;
+    
+    if (searchTerm.length === 0) {
+        // Mostrar todas as linhas
+        rows.forEach(row => {
+            row.style.display = '';
+        });
+        
+        // Mostrar separadores baseado nas linhas visíveis
+        updateSeparators();
+        searchResultsInfo.style.display = 'none';
+    } else {
+        // Filtrar linhas
+        rows.forEach(row => {
+            const productName = row.getAttribute('data-product-name') || '';
+            const supplierName = row.getAttribute('data-supplier-name') || '';
+            
+            if (productName.includes(searchTerm) || supplierName.includes(searchTerm)) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+        
+        // Atualizar separadores
+        updateSeparators();
+        
+        // Mostrar informações de resultados
+        if (visibleCount > 0) {
+            searchResultsText.textContent = `${visibleCount} produto(s) encontrado(s) de ${totalCount} total`;
+            searchResultsInfo.style.display = 'block';
+        } else {
+            searchResultsText.textContent = 'Nenhum produto encontrado';
+            searchResultsInfo.style.display = 'block';
+        }
+    }
+}
+
+// Função para atualizar separadores baseado nas linhas visíveis
+function updateSeparators() {
+    const tableBody = document.getElementById('tableBody');
+    if (!tableBody) return;
+    
+    const rows = tableBody.querySelectorAll('tr');
+    let lastVisibleProduct = '';
+    
+    rows.forEach((row, index) => {
+        if (row.classList.contains('product-separator')) {
+            // Verificar se há produtos visíveis antes e depois do separador
+            let hasVisibleBefore = false;
+            let hasVisibleAfter = false;
+            
+            // Verificar antes
+            for (let i = index - 1; i >= 0; i--) {
+                if (rows[i].classList.contains('product-row')) {
+                    if (rows[i].style.display !== 'none') {
+                        hasVisibleBefore = true;
+                        break;
+                    }
+                } else if (rows[i].classList.contains('product-separator')) {
+                    break;
+                }
+            }
+            
+            // Verificar depois
+            for (let i = index + 1; i < rows.length; i++) {
+                if (rows[i].classList.contains('product-row')) {
+                    if (rows[i].style.display !== 'none') {
+                        hasVisibleAfter = true;
+                        break;
+                    }
+                } else if (rows[i].classList.contains('product-separator')) {
+                    break;
+                }
+            }
+            
+            // Mostrar separador apenas se houver produtos visíveis antes e depois
+            if (hasVisibleBefore && hasVisibleAfter) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        }
+    });
+}
+
+// Função para limpar busca
+function clearSearch() {
+    const searchInput = document.getElementById('productSearch');
+    if (searchInput) {
+        searchInput.value = '';
+        searchProducts();
+        searchInput.focus();
+    }
+}
+
 // Inicializar quando a página carregar
 document.addEventListener('DOMContentLoaded', () => {
     console.log('DOM carregado, inicializando...');
+    
+    // Configurar event listener para busca
+    const searchInput = document.getElementById('productSearch');
+    if (searchInput) {
+        searchInput.addEventListener('input', searchProducts);
+        searchInput.addEventListener('keyup', (e) => {
+            if (e.key === 'Escape') {
+                clearSearch();
+            }
+        });
+    }
     
     // Verificar se estamos voltando da página de fornecedores
     const urlParams = new URLSearchParams(window.location.search);

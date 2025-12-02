@@ -59,6 +59,23 @@
                 </div>
             </div>
 
+            <div class="search-section">
+                <div class="search-container">
+                    <i class="fas fa-search search-icon"></i>
+                    <input type="text" 
+                           id="productSearch" 
+                           class="search-input" 
+                           placeholder="Buscar produto por nome..." 
+                           autocomplete="off">
+                    <button class="search-clear" id="searchClear" onclick="clearSearch()" style="display: none;">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="search-results-info" id="searchResultsInfo" style="display: none;">
+                    <span id="searchResultsText"></span>
+                </div>
+            </div>
+
             <div class="table-wrapper">
                 <table id="priceTable" class="price-table">
                     <thead id="tableHead"></thead>
