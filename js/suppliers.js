@@ -1503,11 +1503,6 @@ async function exportHighlightedExcel() {
         const headers = ['Produto', 'Quantidade', ...suppliers];
         const headerRow = worksheet.addRow(headers);
         
-        // Tamanho de fonte adaptável ao número de fornecedores
-        const headerFontSize = suppliers.length > 10 ? 7 : 8;
-        const productFontSize = suppliers.length > 10 ? 7 : 8;
-        const priceFontSize = suppliers.length > 10 ? 7 : 8;
-        
         // Estilizar cabeçalho
         headerRow.eachCell((cell) => {
             cell.fill = {
@@ -1518,7 +1513,7 @@ async function exportHighlightedExcel() {
             cell.font = {
                 bold: true,
                 color: { argb: 'FFFFFFFF' },
-                size: headerFontSize,
+                size: 9,
                 name: 'Arial'
             };
             cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
@@ -1553,12 +1548,12 @@ async function exportHighlightedExcel() {
                 };
                 
                 if (colNumber === 1) {
-                    cell.font = { bold: true, size: productFontSize, name: 'Arial' };
+                    cell.font = { bold: true, size: 9, name: 'Arial' };
                     cell.alignment = { vertical: 'middle', wrapText: true };
                 }
                 
                 if (colNumber === 2) {
-                    cell.font = { size: priceFontSize, name: 'Arial' };
+                    cell.font = { size: 9, name: 'Arial' };
                     cell.alignment = { horizontal: 'center', vertical: 'middle' };
                 }
                 
@@ -1567,10 +1562,10 @@ async function exportHighlightedExcel() {
                     const supplier = suppliers[supplierIndex];
                     const key = `${product}-${supplier}`;
                     
-                    cell.font = { size: priceFontSize, name: 'Arial' };
+                    cell.font = { size: 9, name: 'Arial' };
                     
                     if (cell.value && typeof cell.value === 'number') {
-                        cell.numFmt = '#,##0.00';
+                        cell.numFmt = 'R$ #,##0.00';
                     }
                     
                     cell.alignment = { horizontal: 'center', vertical: 'middle' };
@@ -1581,29 +1576,29 @@ async function exportHighlightedExcel() {
                             pattern: 'solid',
                             fgColor: { argb: 'FFFFFF00' }
                         };
-                        cell.font = { bold: true, size: priceFontSize, name: 'Arial' };
+                        cell.font = { bold: true, size: 9, name: 'Arial' };
                     }
                 }
             });
         });
         
         // Calcular larguras de coluna otimizadas para caber em A4
-        const maxPageWidth = useLandscape ? 140 : 100;
-        const qtyColWidth = 6;
-        const supplierColWidth = Math.max(7, Math.min(12, Math.floor((maxPageWidth * 0.65) / suppliers.length)));
-        const productColWidth = Math.max(18, maxPageWidth - qtyColWidth - (suppliers.length * supplierColWidth));
+        const maxPageWidth = useLandscape ? 135 : 95;
+        const fixedColsWidth = 10;
+        const productColWidth = Math.min(30, Math.max(20, maxPageWidth - fixedColsWidth - (suppliers.length * 10)));
+        const supplierColWidth = Math.max(9, Math.floor((maxPageWidth - productColWidth - fixedColsWidth) / suppliers.length));
         
         worksheet.getColumn(1).width = productColWidth;
-        worksheet.getColumn(2).width = qtyColWidth;
+        worksheet.getColumn(2).width = fixedColsWidth;
         for (let i = 3; i <= suppliers.length + 2; i++) {
             worksheet.getColumn(i).width = supplierColWidth;
         }
         
         // Altura das linhas compacta para impressão
         worksheet.eachRow((row) => {
-            row.height = 15;
+            row.height = 18;
         });
-        headerRow.height = 22;
+        headerRow.height = 24;
         
         // Linhas zebradas para facilitar leitura na impressão
         worksheet.eachRow((row, rowNumber) => {
