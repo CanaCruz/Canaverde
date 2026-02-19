@@ -1474,6 +1474,31 @@ async function exportHighlightedExcel() {
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('Cotação');
         
+        // Configuração de página para impressão A4
+        const totalCols = 2 + suppliers.length;
+        const useLandscape = totalCols > 5;
+        
+        worksheet.pageSetup = {
+            paperSize: 9,
+            orientation: useLandscape ? 'landscape' : 'portrait',
+            fitToPage: true,
+            fitToWidth: 1,
+            fitToHeight: 0,
+            horizontalCentered: true,
+            verticalCentered: false,
+            margins: {
+                left: 0.25,
+                right: 0.25,
+                top: 0.4,
+                bottom: 0.4,
+                header: 0.2,
+                footer: 0.2
+            }
+        };
+        
+        // Repetir cabeçalho em todas as páginas ao imprimir
+        worksheet.pageSetup.printTitlesRow = '1:1';
+        
         // Definir cabeçalhos
         const headers = ['Produto', 'Quantidade', ...suppliers];
         const headerRow = worksheet.addRow(headers);
@@ -1488,9 +1513,10 @@ async function exportHighlightedExcel() {
             cell.font = {
                 bold: true,
                 color: { argb: 'FFFFFFFF' },
-                size: 11
+                size: 9,
+                name: 'Arial'
             };
-            cell.alignment = { horizontal: 'center', vertical: 'middle' };
+            cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
             cell.border = {
                 top: { style: 'thin', color: { argb: 'FF1B5E20' } },
                 bottom: { style: 'thin', color: { argb: 'FF1B5E20' } },
@@ -1514,63 +1540,80 @@ async function exportHighlightedExcel() {
             
             // Estilizar cada célula
             row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-                // Bordas em todas as células
                 cell.border = {
-                    top: { style: 'thin', color: { argb: 'FFE0E0E0' } },
-                    bottom: { style: 'thin', color: { argb: 'FFE0E0E0' } },
-                    left: { style: 'thin', color: { argb: 'FFE0E0E0' } },
-                    right: { style: 'thin', color: { argb: 'FFE0E0E0' } }
+                    top: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+                    bottom: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+                    left: { style: 'thin', color: { argb: 'FFD0D0D0' } },
+                    right: { style: 'thin', color: { argb: 'FFD0D0D0' } }
                 };
                 
-                // Coluna do produto (1) - negrito
                 if (colNumber === 1) {
-                    cell.font = { bold: true, size: 11 };
-                    cell.alignment = { vertical: 'middle' };
+                    cell.font = { bold: true, size: 9, name: 'Arial' };
+                    cell.alignment = { vertical: 'middle', wrapText: true };
                 }
                 
-                // Coluna da quantidade (2) - centralizado
                 if (colNumber === 2) {
+                    cell.font = { size: 9, name: 'Arial' };
                     cell.alignment = { horizontal: 'center', vertical: 'middle' };
                 }
                 
-                // Colunas de fornecedores (3 em diante)
                 if (colNumber >= 3) {
                     const supplierIndex = colNumber - 3;
                     const supplier = suppliers[supplierIndex];
                     const key = `${product}-${supplier}`;
                     
-                    // Formatar como moeda
+                    cell.font = { size: 9, name: 'Arial' };
+                    
                     if (cell.value && typeof cell.value === 'number') {
                         cell.numFmt = 'R$ #,##0.00';
                     }
                     
                     cell.alignment = { horizontal: 'center', vertical: 'middle' };
                     
-                    // Pintar de AMARELO se for o fornecedor selecionado
                     if (lowestPricesMap.has(key) && !removedSet.has(key)) {
                         cell.fill = {
                             type: 'pattern',
                             pattern: 'solid',
                             fgColor: { argb: 'FFFFFF00' }
                         };
-                        cell.font = { bold: true, size: 11 };
+                        cell.font = { bold: true, size: 9, name: 'Arial' };
                     }
                 }
             });
         });
         
-        // Ajustar largura das colunas
-        worksheet.getColumn(1).width = 35;
-        worksheet.getColumn(2).width = 12;
+        // Calcular larguras de coluna otimizadas para caber em A4
+        const maxPageWidth = useLandscape ? 135 : 95;
+        const fixedColsWidth = 10;
+        const productColWidth = Math.min(30, Math.max(20, maxPageWidth - fixedColsWidth - (suppliers.length * 10)));
+        const supplierColWidth = Math.max(9, Math.floor((maxPageWidth - productColWidth - fixedColsWidth) / suppliers.length));
+        
+        worksheet.getColumn(1).width = productColWidth;
+        worksheet.getColumn(2).width = fixedColsWidth;
         for (let i = 3; i <= suppliers.length + 2; i++) {
-            worksheet.getColumn(i).width = 15;
+            worksheet.getColumn(i).width = supplierColWidth;
         }
         
-        // Altura das linhas
+        // Altura das linhas compacta para impressão
         worksheet.eachRow((row) => {
-            row.height = 22;
+            row.height = 18;
         });
-        headerRow.height = 28;
+        headerRow.height = 24;
+        
+        // Linhas zebradas para facilitar leitura na impressão
+        worksheet.eachRow((row, rowNumber) => {
+            if (rowNumber > 1 && rowNumber % 2 === 0) {
+                row.eachCell({ includeEmpty: true }, (cell) => {
+                    if (!cell.fill || !cell.fill.fgColor || cell.fill.fgColor.argb !== 'FFFFFF00') {
+                        cell.fill = {
+                            type: 'pattern',
+                            pattern: 'solid',
+                            fgColor: { argb: 'FFF5F5F5' }
+                        };
+                    }
+                });
+            }
+        });
         
         // Gerar arquivo e fazer download
         const buffer = await workbook.xlsx.writeBuffer();
