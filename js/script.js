@@ -115,6 +115,10 @@ class PriceAnalyzer {
         
         // Limpar localStorage
         localStorage.removeItem('canaverdeData');
+        localStorage.removeItem('canaverdeDataOriginal');
+        localStorage.removeItem('removedProducts');
+        localStorage.removeItem('finishedSuppliers');
+        localStorage.removeItem('productUnits');
         
         // Ocultar menu hambúrguer
         const menuToggle = document.querySelector('.menu-toggle');
@@ -846,6 +850,12 @@ function toggleMenu() {
         };
         
         localStorage.setItem('canaverdeData', JSON.stringify(dataToSave));
+        
+        // Salvar cópia original (para permitir reset na página de fornecedores)
+        if (!localStorage.getItem('canaverdeDataOriginal')) {
+            localStorage.setItem('canaverdeDataOriginal', JSON.stringify(dataToSave));
+            console.log('Cópia original dos dados salva');
+        }
         
         console.log('Dados salvos no localStorage:', dataToSave);
         console.log('Navegando para pages/suppliers.html...');
