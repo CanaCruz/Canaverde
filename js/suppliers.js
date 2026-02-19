@@ -1,3 +1,47 @@
+// Tipos de unidade disponíveis
+const UNIT_TYPES = [
+    { id: 'cx', label: 'Caixa', short: 'cx', icon: 'fa-box' },
+    { id: 'fd', label: 'Fardo', short: 'fd', icon: 'fa-boxes' },
+    { id: 'dp', label: 'Display', short: 'dp', icon: 'fa-th' },
+    { id: 'un', label: 'Unidade', short: 'un', icon: 'fa-cube' }
+];
+
+function getProductUnit(productName, supplierName) {
+    const units = JSON.parse(localStorage.getItem('productUnits') || '{}');
+    return units[`${productName}-${supplierName}`] || 'cx';
+}
+
+function changeUnit(productName, supplierName, newUnit) {
+    const units = JSON.parse(localStorage.getItem('productUnits') || '{}');
+    units[`${productName}-${supplierName}`] = newUnit;
+    localStorage.setItem('productUnits', JSON.stringify(units));
+
+    const savedData = localStorage.getItem('canaverdeData');
+    if (savedData) {
+        const data = JSON.parse(savedData);
+        createSupplierCards(data);
+        updateStats(data);
+    }
+
+    const unitType = UNIT_TYPES.find(u => u.id === newUnit);
+    showNotification(`✅ Unidade alterada para ${unitType ? unitType.label : newUnit}`, 'success');
+}
+
+function generateUnitOptions(productName, supplierName, currentUnit) {
+    const escapedProduct = productName.replace(/'/g, "\\'");
+    const escapedSupplier = supplierName.replace(/'/g, "\\'");
+    return UNIT_TYPES.map(u => {
+        const isActive = u.id === currentUnit;
+        return `
+            <button class="menu-option unit-option ${isActive ? 'unit-active' : ''}"
+                    onclick="event.stopPropagation(); changeUnit('${escapedProduct}', '${escapedSupplier}', '${u.id}'); closeAllMenus();">
+                <i class="fas ${u.icon}"></i> ${u.label} (${u.short})
+                ${isActive ? '<i class="fas fa-check unit-check"></i>' : ''}
+            </button>
+        `;
+    }).join('');
+}
+
 // Função para voltar à página principal
 function goBackToMain() {
     console.log('Voltando para página principal...');
@@ -162,6 +206,8 @@ function createSupplierCards(data) {
             console.log(`Renderizando produto ${index + 1}/${products.length}: ${product.product}`);
             const quantity = product.quantity || 0;
             const totalPrice = product.price * quantity;
+            const currentUnit = getProductUnit(product.product, product.supplier);
+            const unitOptionsHtml = generateUnitOptions(product.product, product.supplier, currentUnit);
             
             console.log(`Produto: ${product.product}, Qtd: ${quantity}`);
             
@@ -176,12 +222,24 @@ function createSupplierCards(data) {
                     <div class="product-header">
                         <span class="product-name">${product.product}</span>
                         <div class="product-actions">
+                            <div class="product-menu-container">
+                                <button class="product-menu-btn" onclick="toggleProductMenu(event)" title="Opções">
+                                    <i class="fas fa-ellipsis-v"></i>
+                                </button>
+                                <div class="product-menu-dropdown">
+                                    <button class="menu-option" onclick="showPriceComparison('${product.product}', '${product.supplier}'); closeAllMenus();">
+                                        <i class="fas fa-balance-scale"></i> Comparar Preços
+                                    </button>
+                                    <div class="menu-divider"></div>
+                                    <div class="menu-section-label"><i class="fas fa-ruler"></i> Unidade</div>
+                                    ${unitOptionsHtml}
+                                    <div class="menu-divider"></div>
+                                    <button class="menu-option remove-option" onclick="removeProduct('${product.product}', '${product.supplier}'); closeAllMenus();">
+                                        <i class="fas fa-trash-alt"></i> Remover
+                                    </button>
+                                </div>
+                            </div>
                             <span class="drag-handle">⋮⋮</span>
-                            <button class="remove-product-btn" 
-                                    onclick="removeProduct('${product.product}', '${product.supplier}')"
-                                    title="Remover produto">
-                                <i class="fas fa-times"></i>
-                            </button>
                         </div>
                     </div>
                     <div class="product-details">
@@ -197,6 +255,7 @@ function createSupplierCards(data) {
                                    data-supplier="${product.supplier}"
                                    data-unit-price="${product.price}"
                                    onchange="updateSupplierQuantity(this)">
+                            <span class="unit-badge" title="Altere nos 3 pontinhos">${currentUnit}</span>
                         </div>
                         <div class="product-detail">
                             <span class="product-detail-label">Preço Unit.:</span>
@@ -564,6 +623,16 @@ function updateProductSupplier(data, productName, oldSupplier, newSupplier, newP
         
         data.lowestPrices = Array.from(lowestPricesMap.entries());
         
+        // Transferir unidade do produto para o novo fornecedor
+        const units = JSON.parse(localStorage.getItem('productUnits') || '{}');
+        const oldUnitKey = `${productName}-${oldSupplier}`;
+        const newUnitKey = `${productName}-${newSupplier}`;
+        if (units[oldUnitKey]) {
+            units[newUnitKey] = units[oldUnitKey];
+            delete units[oldUnitKey];
+            localStorage.setItem('productUnits', JSON.stringify(units));
+        }
+        
         // Salvar dados atualizados
         localStorage.setItem('canaverdeData', JSON.stringify(data));
         
@@ -607,12 +676,14 @@ function copySupplierText(supplierName) {
         const unitPrice = product.querySelector('.product-detail-value').textContent;
         
         const quantity = quantityInput.value || '0';
+        const unitBadge = product.querySelector('.unit-badge');
+        const unit = unitBadge ? unitBadge.textContent.trim() : 'cx';
         
         // Limpar completamente o preço e reconstruir
         const cleanPrice = unitPrice.replace(/\s+/g, ' ').trim();
         
         whatsappText += `${index + 1}. *${productName}*\n`;
-        whatsappText += `   • Quantidade: ${quantity} cx\n`;
+        whatsappText += `   • Quantidade: ${quantity} ${unit}\n`;
         whatsappText += `   • Preço Unit.: ${cleanPrice}\n\n\n`;
         
         hasProducts = true;
@@ -1103,6 +1174,492 @@ function toggleRemovedProducts() {
     container.style.display = isVisible ? 'none' : 'block';
     toggleText.textContent = isVisible ? 'Mostrar' : 'Ocultar';
 }
+
+// Função para abrir/fechar o menu de opções do produto
+function toggleProductMenu(event) {
+    event.stopPropagation();
+    event.preventDefault();
+    
+    const btn = event.currentTarget;
+    const sourceDropdown = btn.nextElementSibling;
+    const productItem = btn.closest('.product-item');
+    
+    // Verificar se este menu já está aberto
+    const existingPortal = document.getElementById('menu-portal');
+    const wasThisMenu = existingPortal && existingPortal._sourceBtn === btn;
+    
+    // Fechar tudo primeiro
+    closeAllMenus();
+    
+    // Se era o mesmo botão, apenas fechar
+    if (wasThisMenu) return;
+    
+    // Criar portal no body com o conteúdo do dropdown
+    const portal = document.createElement('div');
+    portal.id = 'menu-portal';
+    portal.innerHTML = sourceDropdown.innerHTML;
+    portal._sourceBtn = btn;
+    document.body.appendChild(portal);
+    
+    if (productItem) productItem.classList.add('menu-open');
+    
+    // Posicionar após renderização
+    requestAnimationFrame(() => {
+        const btnRect = btn.getBoundingClientRect();
+        const portalRect = portal.getBoundingClientRect();
+        const vh = window.innerHeight;
+        const vw = window.innerWidth;
+        
+        let top = btnRect.bottom + 4;
+        let left = btnRect.right - portalRect.width;
+        
+        if (left < 8) left = 8;
+        if (left + portalRect.width > vw - 8) left = vw - portalRect.width - 8;
+        if (top + portalRect.height > vh - 8) top = btnRect.top - portalRect.height - 4;
+        if (top < 8) top = 8;
+        
+        portal.style.top = `${top}px`;
+        portal.style.left = `${left}px`;
+    });
+}
+
+// Função para fechar todos os menus dropdown
+function closeAllMenus() {
+    const portal = document.getElementById('menu-portal');
+    if (portal) portal.remove();
+    document.querySelectorAll('.product-item.menu-open').forEach(item => {
+        item.classList.remove('menu-open');
+    });
+}
+
+// Função para mostrar comparação de preços entre fornecedores
+function showPriceComparison(productName, currentSupplier) {
+    console.log(`Comparando preços para: ${productName} (fornecedor atual: ${currentSupplier})`);
+    
+    const savedData = localStorage.getItem('canaverdeData');
+    if (!savedData) {
+        showNotification('❌ Nenhum dado encontrado', 'error');
+        return;
+    }
+    
+    try {
+        const data = JSON.parse(savedData);
+        
+        // Encontrar todos os preços para este produto em todos os fornecedores
+        const productPrices = data.data.filter(item => item.product === productName);
+        
+        if (productPrices.length === 0) {
+            showNotification('❌ Nenhum preço encontrado para este produto', 'error');
+            return;
+        }
+        
+        // Ordenar por preço (menor primeiro)
+        productPrices.sort((a, b) => a.price - b.price);
+        
+        const lowestPrice = productPrices[0].price;
+        const highestPrice = productPrices[productPrices.length - 1].price;
+        
+        // Criar o overlay do modal
+        const overlay = document.createElement('div');
+        overlay.className = 'price-comparison-overlay';
+        overlay.onclick = function(e) {
+            if (e.target === overlay) {
+                closePriceComparison();
+            }
+        };
+        
+        // Gerar itens da comparação
+        let comparisonItems = productPrices.map((item, index) => {
+            const isLowest = item.price === lowestPrice;
+            const isCurrent = item.supplier === currentSupplier;
+            const diff = item.price - lowestPrice;
+            const diffPercent = lowestPrice > 0 ? ((diff / lowestPrice) * 100).toFixed(1) : 0;
+            
+            let badges = '';
+            if (isLowest) {
+                badges += '<span class="comparison-badge lowest-badge"><i class="fas fa-trophy"></i> Menor Preço</span>';
+            }
+            if (isCurrent) {
+                badges += '<span class="comparison-badge current-badge"><i class="fas fa-map-marker-alt"></i> Atual</span>';
+            }
+            
+            let diffText = '';
+            if (!isLowest) {
+                diffText = `<span class="comparison-diff">+${diffPercent}% (R$ ${diff.toFixed(2).replace('.', ',')} a mais)</span>`;
+            }
+            
+            // Botão de selecionar (só aparece se não for o fornecedor atual)
+            let selectBtn = '';
+            if (isCurrent) {
+                selectBtn = '<div class="comparison-select-current"><i class="fas fa-check-circle"></i> Selecionado</div>';
+            } else {
+                selectBtn = `<button class="comparison-select-btn" data-product="${productName}" data-old-supplier="${currentSupplier}" data-new-supplier="${item.supplier}" data-new-price="${item.price}"><i class="fas fa-exchange-alt"></i> Selecionar</button>`;
+            }
+            
+            return `
+                <div class="comparison-item ${isLowest ? 'is-lowest' : ''} ${isCurrent ? 'is-current' : ''}">
+                    <div class="comparison-rank">${index + 1}º</div>
+                    <div class="comparison-info">
+                        <div class="comparison-supplier">
+                            <i class="fas fa-store"></i>
+                            ${item.supplier}
+                        </div>
+                        <div class="comparison-badges">${badges}</div>
+                        ${diffText}
+                    </div>
+                    <div class="comparison-right">
+                        <div class="comparison-price">
+                            R$ ${item.price.toFixed(2).replace('.', ',')}
+                        </div>
+                        ${selectBtn}
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+        overlay.innerHTML = `
+            <div class="price-comparison-modal">
+                <div class="comparison-header">
+                    <div class="comparison-title">
+                        <i class="fas fa-balance-scale"></i>
+                        <h3>Comparar Preços</h3>
+                    </div>
+                    <button class="comparison-close" onclick="closePriceComparison()">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="comparison-product-name">
+                    <i class="fas fa-box"></i>
+                    ${productName}
+                </div>
+                <div class="comparison-list">
+                    ${comparisonItems}
+                </div>
+                <div class="comparison-footer">
+                    <span class="comparison-total-suppliers">
+                        <i class="fas fa-store"></i> ${productPrices.length} fornecedor(es)
+                    </span>
+                    <span class="comparison-price-range">
+                        R$ ${lowestPrice.toFixed(2).replace('.', ',')} - R$ ${highestPrice.toFixed(2).replace('.', ',')}
+                    </span>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(overlay);
+        
+        // Adicionar event listeners nos botões de selecionar
+        overlay.querySelectorAll('.comparison-select-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const prodName = this.dataset.product;
+                const oldSupplier = this.dataset.oldSupplier;
+                const newSupplier = this.dataset.newSupplier;
+                const newPrice = parseFloat(this.dataset.newPrice);
+                
+                switchProductSupplier(prodName, oldSupplier, newSupplier, newPrice);
+            });
+        });
+        
+        // Animar entrada
+        requestAnimationFrame(() => {
+            overlay.classList.add('visible');
+        });
+        
+    } catch (error) {
+        console.error('Erro ao comparar preços:', error);
+        showNotification('❌ Erro ao comparar preços', 'error');
+    }
+}
+
+// Função para trocar o produto de fornecedor a partir da comparação
+function switchProductSupplier(productName, oldSupplier, newSupplier, newPrice) {
+    console.log(`Trocando ${productName} de ${oldSupplier} para ${newSupplier} (R$ ${newPrice})`);
+    
+    const savedData = localStorage.getItem('canaverdeData');
+    if (!savedData) return;
+    
+    try {
+        const data = JSON.parse(savedData);
+        
+        // Atualizar usando a mesma lógica do drag and drop
+        updateProductSupplier(data, productName, oldSupplier, newSupplier, newPrice);
+        
+        // Fechar o modal
+        closePriceComparison();
+        
+        // Recriar a interface com dados atualizados
+        createSupplierCards(data);
+        updateStats(data);
+        
+        // Mostrar notificação de sucesso
+        showNotification(`✅ "${productName}" movido para ${newSupplier} (R$ ${newPrice.toFixed(2).replace('.', ',')})`, 'success');
+        
+        console.log(`Produto ${productName} movido de ${oldSupplier} para ${newSupplier}`);
+        
+    } catch (error) {
+        console.error('Erro ao trocar fornecedor:', error);
+        showNotification('❌ Erro ao trocar fornecedor', 'error');
+    }
+}
+
+// Função para fechar modal de comparação de preços
+function closePriceComparison() {
+    const overlay = document.querySelector('.price-comparison-overlay');
+    if (overlay) {
+        overlay.classList.remove('visible');
+        setTimeout(() => {
+            if (overlay.parentNode) {
+                overlay.parentNode.removeChild(overlay);
+            }
+        }, 300);
+    }
+}
+
+// Função para exportar planilha Excel com células selecionadas em amarelo
+async function exportHighlightedExcel() {
+    console.log('Exportando planilha com destaques...');
+    
+    const savedData = localStorage.getItem('canaverdeData');
+    if (!savedData) {
+        showNotification('❌ Nenhum dado encontrado para exportar', 'error');
+        return;
+    }
+    
+    try {
+        const data = JSON.parse(savedData);
+        const lowestPricesMap = new Map(data.lowestPrices || []);
+        const removedProducts = JSON.parse(localStorage.getItem('removedProducts') || '[]');
+        const removedSet = new Set(removedProducts.map(r => `${r.product}-${r.supplier}`));
+        
+        // Obter lista de fornecedores na ordem original
+        const suppliers = data.suppliers || [];
+        
+        // Obter lista de produtos únicos na ordem original dos dados
+        const productsOrder = [];
+        const productsSeen = new Set();
+        data.data.forEach(item => {
+            if (!productsSeen.has(item.product)) {
+                productsSeen.add(item.product);
+                productsOrder.push(item.product);
+            }
+        });
+        
+        // Criar mapa de preços: produto -> fornecedor -> preço
+        const priceMap = {};
+        data.data.forEach(item => {
+            if (!priceMap[item.product]) {
+                priceMap[item.product] = {};
+            }
+            priceMap[item.product][item.supplier] = item.price;
+        });
+        
+        // Criar mapa de quantidades
+        const quantityMap = {};
+        data.data.forEach(item => {
+            if (!quantityMap[item.product]) {
+                quantityMap[item.product] = item.quantity || 0;
+            }
+        });
+        
+        // Descobrir quais produtos estão selecionados e para qual fornecedor
+        const selectedProducts = new Set();
+        for (let [key] of lowestPricesMap) {
+            const productName = key.substring(0, key.lastIndexOf('-'));
+            if (!removedSet.has(key)) {
+                selectedProducts.add(productName);
+            }
+        }
+        
+        // Criar workbook com ExcelJS
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Cotação');
+        
+        // Definir cabeçalhos
+        const headers = ['Produto', 'Quantidade', ...suppliers];
+        const headerRow = worksheet.addRow(headers);
+        
+        // Estilizar cabeçalho
+        headerRow.eachCell((cell) => {
+            cell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FF2E7D32' }
+            };
+            cell.font = {
+                bold: true,
+                color: { argb: 'FFFFFFFF' },
+                size: 11
+            };
+            cell.alignment = { horizontal: 'center', vertical: 'middle' };
+            cell.border = {
+                top: { style: 'thin', color: { argb: 'FF1B5E20' } },
+                bottom: { style: 'thin', color: { argb: 'FF1B5E20' } },
+                left: { style: 'thin', color: { argb: 'FF1B5E20' } },
+                right: { style: 'thin', color: { argb: 'FF1B5E20' } }
+            };
+        });
+        
+        // Preencher dados por produto
+        productsOrder.forEach(product => {
+            const prices = priceMap[product] || {};
+            const quantity = quantityMap[product] || 0;
+            
+            const rowData = [product, quantity > 0 ? quantity : ''];
+            
+            suppliers.forEach(supplier => {
+                rowData.push(prices[supplier] || '');
+            });
+            
+            const row = worksheet.addRow(rowData);
+            
+            // Estilizar cada célula
+            row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+                // Bordas em todas as células
+                cell.border = {
+                    top: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+                    bottom: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+                    left: { style: 'thin', color: { argb: 'FFE0E0E0' } },
+                    right: { style: 'thin', color: { argb: 'FFE0E0E0' } }
+                };
+                
+                // Coluna do produto (1) - negrito
+                if (colNumber === 1) {
+                    cell.font = { bold: true, size: 11 };
+                    cell.alignment = { vertical: 'middle' };
+                }
+                
+                // Coluna da quantidade (2) - centralizado
+                if (colNumber === 2) {
+                    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                }
+                
+                // Colunas de fornecedores (3 em diante)
+                if (colNumber >= 3) {
+                    const supplierIndex = colNumber - 3;
+                    const supplier = suppliers[supplierIndex];
+                    const key = `${product}-${supplier}`;
+                    
+                    // Formatar como moeda
+                    if (cell.value && typeof cell.value === 'number') {
+                        cell.numFmt = 'R$ #,##0.00';
+                    }
+                    
+                    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                    
+                    // Pintar de AMARELO se for o fornecedor selecionado
+                    if (lowestPricesMap.has(key) && !removedSet.has(key)) {
+                        cell.fill = {
+                            type: 'pattern',
+                            pattern: 'solid',
+                            fgColor: { argb: 'FFFFFF00' }
+                        };
+                        cell.font = { bold: true, size: 11 };
+                    }
+                }
+            });
+        });
+        
+        // Ajustar largura das colunas
+        worksheet.getColumn(1).width = 35;
+        worksheet.getColumn(2).width = 12;
+        for (let i = 3; i <= suppliers.length + 2; i++) {
+            worksheet.getColumn(i).width = 15;
+        }
+        
+        // Altura das linhas
+        worksheet.eachRow((row) => {
+            row.height = 22;
+        });
+        headerRow.height = 28;
+        
+        // Gerar arquivo e fazer download
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { 
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+        });
+        
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'Cotacao_Canaverde.xlsx';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        
+        showNotification('✅ Planilha exportada com sucesso!', 'success');
+        console.log('Planilha exportada com destaques amarelos');
+        
+    } catch (error) {
+        console.error('Erro ao exportar planilha:', error);
+        showNotification('❌ Erro ao exportar planilha', 'error');
+    }
+}
+
+// Função para resetar todos os dados ao estado original da planilha
+function resetAllData() {
+    const originalData = localStorage.getItem('canaverdeDataOriginal');
+    
+    if (!originalData) {
+        showNotification('❌ Nenhum dado original encontrado. Carregue a planilha novamente.', 'error');
+        return;
+    }
+    
+    if (!confirm('Tem certeza que deseja resetar tudo?\n\nIsso vai:\n• Restaurar todos os produtos removidos\n• Desfazer todas as trocas de fornecedor\n• Voltar ao estado original da planilha')) {
+        return;
+    }
+    
+    try {
+        // Restaurar dados originais
+        localStorage.setItem('canaverdeData', originalData);
+        
+        // Limpar produtos removidos
+        localStorage.removeItem('removedProducts');
+        
+        // Limpar checkboxes de finalizado
+        localStorage.removeItem('finishedSuppliers');
+        
+        // Limpar unidades customizadas
+        localStorage.removeItem('productUnits');
+        
+        // Recarregar a interface com os dados originais
+        const data = JSON.parse(originalData);
+        
+        createSupplierCards(data);
+        updateStats(data);
+        updateRemovedProductsSection();
+        
+        showNotification('✅ Tudo foi resetado ao estado original da planilha!', 'success');
+        
+        console.log('Dados resetados ao estado original');
+        
+    } catch (error) {
+        console.error('Erro ao resetar dados:', error);
+        showNotification('❌ Erro ao resetar dados', 'error');
+    }
+}
+
+// Fechar menus ao clicar fora
+document.addEventListener('click', function(event) {
+    if (!event.target.closest('.product-menu-container') && !event.target.closest('#menu-portal')) {
+        closeAllMenus();
+    }
+});
+
+// Fechar menus ao rolar a página (dropdown usa position: fixed)
+let scrollCloseTimeout = null;
+window.addEventListener('scroll', function() {
+    clearTimeout(scrollCloseTimeout);
+    scrollCloseTimeout = setTimeout(closeAllMenus, 50);
+}, true);
+
+// Fechar modal com Escape
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') {
+        closePriceComparison();
+        closeAllMenus();
+    }
+});
 
 // Rastrear posição do mouse para scroll automático
 document.addEventListener('mousemove', (event) => {
