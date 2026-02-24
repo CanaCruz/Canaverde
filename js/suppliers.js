@@ -1453,14 +1453,6 @@ async function exportHighlightedExcel() {
             priceMap[item.product][item.supplier] = item.price;
         });
         
-        // Criar mapa de quantidades
-        const quantityMap = {};
-        data.data.forEach(item => {
-            if (!quantityMap[item.product]) {
-                quantityMap[item.product] = item.quantity || 0;
-            }
-        });
-        
         // Descobrir quais produtos estão selecionados e para qual fornecedor
         const selectedProducts = new Set();
         for (let [key] of lowestPricesMap) {
@@ -1475,7 +1467,7 @@ async function exportHighlightedExcel() {
         const worksheet = workbook.addWorksheet('Cotação');
         
         // Configuração de página para impressão A4
-        const totalCols = 2 + suppliers.length;
+        const totalCols = 1 + suppliers.length;
         const useLandscape = totalCols > 5;
         
         worksheet.pageSetup = {
@@ -1500,7 +1492,7 @@ async function exportHighlightedExcel() {
         worksheet.pageSetup.printTitlesRow = '1:1';
         
         // Definir cabeçalhos
-        const headers = ['Produto', 'Quantidade', ...suppliers];
+        const headers = ['Produto', ...suppliers];
         const headerRow = worksheet.addRow(headers);
         
         // Estilizar cabeçalho
@@ -1516,7 +1508,12 @@ async function exportHighlightedExcel() {
                 size: 9,
                 name: 'Arial'
             };
-            cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+            cell.alignment = {
+                horizontal: 'center',
+                vertical: 'middle',
+                wrapText: false,
+                shrinkToFit: true
+            };
             cell.border = {
                 top: { style: 'thin', color: { argb: 'FF1B5E20' } },
                 bottom: { style: 'thin', color: { argb: 'FF1B5E20' } },
@@ -1528,9 +1525,7 @@ async function exportHighlightedExcel() {
         // Preencher dados por produto
         productsOrder.forEach(product => {
             const prices = priceMap[product] || {};
-            const quantity = quantityMap[product] || 0;
-            
-            const rowData = [product, quantity > 0 ? quantity : ''];
+            const rowData = [product];
             
             suppliers.forEach(supplier => {
                 rowData.push(prices[supplier] || '');
@@ -1548,17 +1543,17 @@ async function exportHighlightedExcel() {
                 };
                 
                 if (colNumber === 1) {
-                    cell.font = { bold: true, size: 9, name: 'Arial' };
-                    cell.alignment = { vertical: 'middle', wrapText: true };
+                    cell.font = { bold: false, size: 9, name: 'Calibri' };
+                    cell.alignment = {
+                        horizontal: 'left',
+                        vertical: 'middle',
+                        wrapText: false,
+                        shrinkToFit: true
+                    };
                 }
                 
-                if (colNumber === 2) {
-                    cell.font = { size: 9, name: 'Arial' };
-                    cell.alignment = { horizontal: 'center', vertical: 'middle' };
-                }
-                
-                if (colNumber >= 3) {
-                    const supplierIndex = colNumber - 3;
+                if (colNumber >= 2) {
+                    const supplierIndex = colNumber - 2;
                     const supplier = suppliers[supplierIndex];
                     const key = `${product}-${supplier}`;
                     
@@ -1568,7 +1563,11 @@ async function exportHighlightedExcel() {
                         cell.numFmt = 'R$ #,##0.00';
                     }
                     
-                    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                    cell.alignment = {
+                        horizontal: 'center',
+                        vertical: 'middle',
+                        shrinkToFit: true
+                    };
                     
                     if (lowestPricesMap.has(key) && !removedSet.has(key)) {
                         cell.fill = {
@@ -1584,13 +1583,11 @@ async function exportHighlightedExcel() {
         
         // Calcular larguras de coluna otimizadas para caber em A4
         const maxPageWidth = useLandscape ? 135 : 95;
-        const fixedColsWidth = 10;
-        const productColWidth = Math.min(30, Math.max(20, maxPageWidth - fixedColsWidth - (suppliers.length * 10)));
-        const supplierColWidth = Math.max(9, Math.floor((maxPageWidth - productColWidth - fixedColsWidth) / suppliers.length));
+        const productColWidth = Math.min(64, Math.max(44, maxPageWidth - (suppliers.length * 7)));
+        const supplierColWidth = Math.max(10, Math.floor((maxPageWidth - productColWidth) / suppliers.length));
         
         worksheet.getColumn(1).width = productColWidth;
-        worksheet.getColumn(2).width = fixedColsWidth;
-        for (let i = 3; i <= suppliers.length + 2; i++) {
+        for (let i = 2; i <= suppliers.length + 1; i++) {
             worksheet.getColumn(i).width = supplierColWidth;
         }
         
@@ -1598,7 +1595,7 @@ async function exportHighlightedExcel() {
         worksheet.eachRow((row) => {
             row.height = 18;
         });
-        headerRow.height = 24;
+        headerRow.height = 18;
         
         // Linhas zebradas para facilitar leitura na impressão
         worksheet.eachRow((row, rowNumber) => {

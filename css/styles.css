@@ -460,8 +460,9 @@ body::before {
 }
 
 .price-table {
-    width: 100%;
+    width: max(100%, 1300px);
     border-collapse: collapse;
+    table-layout: fixed;
     background: white;
 }
 
@@ -471,14 +472,48 @@ body::before {
     padding: 15px 12px;
     text-align: left;
     font-weight: 600;
-    font-size: 0.95rem;
+    font-size: 10px;
+    font-family: Calibri, Arial, sans-serif;
     border-radius: 10px 10px 0 0;
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    overflow: visible;
+    text-overflow: clip;
 }
 
 .price-table td {
     padding: 12px;
     border-bottom: 1px solid #eee;
-    font-size: 0.9rem;
+    font-size: 10px;
+    font-family: Calibri, Arial, sans-serif;
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    overflow: visible;
+    text-overflow: clip;
+    vertical-align: top;
+}
+
+/* Primeira coluna (Produto) com largura maior e quebra de texto */
+.price-table th:first-child,
+.price-table td:first-child {
+    width: 320px;
+    min-width: 300px;
+    max-width: 420px;
+    text-align: left;
+    vertical-align: top;
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+}
+
+/* Coluna de status pode quebrar para nao forcar cortes */
+.price-table th:last-child,
+.price-table td:last-child {
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
 }
 
 .price-table tr:hover {
@@ -525,6 +560,80 @@ body::before {
 
 .price-table td.clickable-price:hover::before {
     display: none;
+}
+
+/* Impressao da cotacao */
+@page {
+    size: A4 landscape;
+    margin: 8mm;
+}
+
+@media print {
+    body {
+        background: #fff !important;
+        color: #000 !important;
+    }
+
+    .container {
+        max-width: none !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        min-height: auto !important;
+    }
+
+    .header,
+    .upload-section,
+    .search-section,
+    .debug-info,
+    .menu-toggle {
+        display: none !important;
+    }
+
+    .analysis-section {
+        display: block !important;
+        background: #fff !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
+        padding: 0 !important;
+    }
+
+    .table-wrapper {
+        overflow: visible !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
+    }
+
+    .price-table {
+        width: 100% !important;
+        table-layout: fixed;
+        border-collapse: collapse;
+    }
+
+    .price-table th,
+    .price-table td {
+        font-family: Calibri, Arial, sans-serif !important;
+        font-size: 9px !important;
+        line-height: 1.2 !important;
+        overflow: visible !important;
+        text-overflow: clip !important;
+        white-space: normal !important;
+        word-break: break-word !important;
+        overflow-wrap: anywhere !important;
+        page-break-inside: avoid !important;
+    }
+
+    .price-table th:first-child,
+    .price-table td:first-child {
+        width: 320px !important;
+        min-width: 300px !important;
+        text-align: left !important;
+        vertical-align: top !important;
+    }
+
+    .price-table tr {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+    }
 }
 
 /* Status messages */
