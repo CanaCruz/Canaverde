@@ -28,10 +28,20 @@
                 <i class="fas fa-hand-paper"></i> 
                 Arraste produtos entre fornecedores para simular diferentes cenários
             </p>
-            <button class="back-btn" onclick="goBackToMain()">
-                <i class="fas fa-arrow-left"></i>
-                Voltar para Análise
-            </button>
+            <div class="header-buttons">
+                <button class="back-btn" onclick="goBackToMain()">
+                    <i class="fas fa-arrow-left"></i>
+                    Voltar para Análise
+                </button>
+                <button class="reset-btn" onclick="resetAllData()">
+                    <i class="fas fa-undo-alt"></i>
+                    Resetar Tudo
+                </button>
+                <button class="export-btn" onclick="exportHighlightedExcel()">
+                    <i class="fas fa-file-excel"></i>
+                    Exportar Planilha
+                </button>
+            </div>
         </div>
 
         <div class="stats-summary">
@@ -76,6 +86,7 @@
         </div>
     </div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
     <script src="../js/suppliers.js"></script>
 </body>
 </html>
