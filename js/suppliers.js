@@ -16,11 +16,29 @@ function changeUnit(productName, supplierName, newUnit) {
     units[`${productName}-${supplierName}`] = newUnit;
     localStorage.setItem('productUnits', JSON.stringify(units));
 
+    // Preservar posição de rolagem da página e da lista do fornecedor
+    const pageScrollY = window.scrollY;
+    const currentSupplierCard = Array.from(document.querySelectorAll('.supplier-card'))
+        .find(card => card.dataset.supplier === supplierName);
+    const currentProductsList = currentSupplierCard ? currentSupplierCard.querySelector('.products-list') : null;
+    const supplierScrollTop = currentProductsList ? currentProductsList.scrollTop : 0;
+
     const savedData = localStorage.getItem('canaverdeData');
     if (savedData) {
         const data = JSON.parse(savedData);
         createSupplierCards(data);
         updateStats(data);
+
+        // Restaurar rolagem após renderização
+        requestAnimationFrame(() => {
+            window.scrollTo(0, pageScrollY);
+            const newSupplierCard = Array.from(document.querySelectorAll('.supplier-card'))
+                .find(card => card.dataset.supplier === supplierName);
+            const newProductsList = newSupplierCard ? newSupplierCard.querySelector('.products-list') : null;
+            if (newProductsList) {
+                newProductsList.scrollTop = supplierScrollTop;
+            }
+        });
     }
 
     const unitType = UNIT_TYPES.find(u => u.id === newUnit);
