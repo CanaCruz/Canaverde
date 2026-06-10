@@ -174,6 +174,18 @@ Para dúvidas ou problemas, verifique:
 
 ## 🚀 Versão Atual
 
+**Versão:** 2.2 - Embalagens e Visual  
+**Última atualização:** Junho 2026
+
+### Novidades da v2.2
+- 📦 **Itens por embalagem**: novo campo em cada produto na página de fornecedores. O total agora é `quantidade × itens por embalagem × preço unitário`. Ex: 2 cx de um produto com 12 itens a R$ 4,50 = **R$ 108,00** (antes somava só R$ 9,00). O valor fica memorizado por produto, mesmo trocando de planilha. Se o preço da planilha já for o da embalagem fechada, deixe em 1.
+- 💰 **Total por produto** visível no card e **Total do Pedido** incluído na lista copiada para WhatsApp
+- 🏷️ **Unidades automáticas refinadas**: cartela agora é exclusiva de isqueiros e aparelhos de barba; dúzia é só manual; pilhas/baterias foram para display; e a detecção passou a priorizar a palavra-chave mais específica ("Chocolate ao Leite" → display, não caixa)
+- 🎨 **Visual**: fonte Inter, cabeçalho da tabela fixo ao rolar, linhas zebradas, hover suave nos cards, barra de rolagem estilizada, foco visível para acessibilidade
+- 🔒 **Correções reaplicadas**: sanitização de nomes com aspas/apóstrofos (sem quebrar menus/copiar/drag), event delegation no lugar de onclick inline, seleção de preço consistente entre páginas, pré-cálculo de colunas e menores preços (mais rápido em planilhas grandes), busca com debounce, logs atrás da flag `DEBUG`
+
+## 📜 Versões Anteriores
+
 **Versão:** 2.0 - Interface Moderna  
 **Última atualização:** Dezembro 2024  
 **Funcionalidades:** Análise completa com seleção de preços, drag and drop, e navegação intuitiva

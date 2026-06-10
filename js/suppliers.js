@@ -1,3 +1,23 @@
+// ===== Utilitários globais =====
+const DEBUG = false;
+const log = (...args) => { if (DEBUG) log(...args); };
+
+// Escapa texto vindo da planilha antes de inserir no HTML (evita quebra de layout e XSS)
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+// Encontra o card de um fornecedor pelo nome (seguro para nomes com aspas/caracteres especiais)
+function findSupplierCard(supplierName) {
+    return Array.from(document.querySelectorAll('.supplier-card'))
+        .find(card => card.dataset.supplier === supplierName) || null;
+}
+
 // Tipos de unidade disponíveis
 const UNIT_TYPES = [
     { id: 'cx', label: 'Caixa', short: 'cx', icon: 'fa-box' },
@@ -38,17 +58,24 @@ const UNIT_AUTO_RULES = [
         unit: 'dp',
         keywords: [
             'chocolate', 'bombom', 'balas', 'pirulito', 'chiclete', 'salgadinho',
+            'pilha', 'bateria',
             'batata frita', 'doritos', 'cheetos', 'amendoim', 'castanha', 'snack',
             'paçoca', 'pacoca', 'wafer', 'biscoito recheado', 'biscoito wafer'
         ]
     },
     {
+        // Dúzia: definida manualmente pelo usuário (sem detecção automática)
         unit: 'dz',
-        keywords: ['ovo', 'ovos', 'long neck', 'energetico', 'energético', 'red bull']
+        keywords: []
     },
     {
+        // Cartela: somente isqueiros e aparelhos de barba
         unit: 'ct',
-        keywords: ['pilha', 'bateria', 'isqueiro', 'fosforo', 'fósforo', 'vela']
+        keywords: [
+            'isqueiro', 'aparelho de barba', 'aparelho de barbear', 'aparelho barbear',
+            'barbeador', 'prestobarba', 'presto barba', 'gilete',
+            'lamina de barbear', 'lâmina de barbear', 'lamina de barba', 'lâmina de barba'
+        ]
     }
 ];
 
@@ -62,12 +89,21 @@ function normalizeProductKey(name) {
 
 function detectUnitFromProduct(productName) {
     const normalized = normalizeProductKey(productName);
+    // A palavra-chave MAIS LONGA que casar vence (mais específica).
+    // Ex: "Chocolate ao Leite" casa com "leite" (cx) e "chocolate" (dp);
+    // "chocolate" é mais longo, então vence -> display.
+    let bestUnit = 'cx';
+    let bestLength = 0;
     for (const rule of UNIT_AUTO_RULES) {
-        if (rule.keywords.some(kw => normalized.includes(normalizeProductKey(kw)))) {
-            return rule.unit;
+        for (const kw of rule.keywords) {
+            const nkw = normalizeProductKey(kw);
+            if (nkw && normalized.includes(nkw) && nkw.length > bestLength) {
+                bestUnit = rule.unit;
+                bestLength = nkw.length;
+            }
         }
     }
-    return 'cx';
+    return bestUnit;
 }
 
 function getSavedUnitPreference(productName) {
@@ -79,6 +115,36 @@ function saveUnitPreference(productName, unit) {
     const prefs = JSON.parse(localStorage.getItem('productUnitPrefs') || '{}');
     prefs[normalizeProductKey(productName)] = unit;
     localStorage.setItem('productUnitPrefs', JSON.stringify(prefs));
+}
+
+// ===== Itens por embalagem =====
+// Quantos itens vêm dentro de 1 caixa/fardo/display/cartela/dúzia.
+// O total passa a ser: quantidade de embalagens × itens por embalagem × preço unitário.
+// Se o preço da planilha já for o preço da embalagem fechada, basta deixar em 1.
+const DEFAULT_PACK_BY_UNIT = { cx: 1, fd: 1, dp: 1, un: 1, dz: 12, ct: 1 };
+
+function getPackSize(productName) {
+    const packs = JSON.parse(localStorage.getItem('productPackSizes') || '{}');
+    const saved = packs[normalizeProductKey(productName)];
+    if (saved && saved > 0) return saved;
+    return 0; // 0 = não definido (usa padrão da unidade)
+}
+
+function getEffectivePackSize(productName, unit) {
+    const saved = getPackSize(productName);
+    if (saved > 0) return saved;
+    return DEFAULT_PACK_BY_UNIT[unit] || 1;
+}
+
+function savePackSize(productName, packSize) {
+    const packs = JSON.parse(localStorage.getItem('productPackSizes') || '{}');
+    const key = normalizeProductKey(productName);
+    if (packSize > 0) {
+        packs[key] = packSize;
+    } else {
+        delete packs[key];
+    }
+    localStorage.setItem('productPackSizes', JSON.stringify(packs));
 }
 
 function getSavedQuantity(productName) {
@@ -200,13 +266,16 @@ function changeUnit(productName, supplierName, newUnit) {
 }
 
 function generateUnitOptions(productName, supplierName, currentUnit) {
-    const escapedProduct = productName.replace(/'/g, "\\'");
-    const escapedSupplier = supplierName.replace(/'/g, "\\'");
+    const safeProduct = escapeHtml(productName);
+    const safeSupplier = escapeHtml(supplierName);
     return UNIT_TYPES.map(u => {
         const isActive = u.id === currentUnit;
         return `
             <button class="menu-option unit-option ${isActive ? 'unit-active' : ''}"
-                    onclick="event.stopPropagation(); changeUnit('${escapedProduct}', '${escapedSupplier}', '${u.id}'); closeAllMenus();">
+                    data-action="change-unit"
+                    data-product="${safeProduct}"
+                    data-supplier="${safeSupplier}"
+                    data-unit-id="${u.id}">
                 <i class="fas ${u.icon}"></i> ${u.label} (${u.short})
                 ${isActive ? '<i class="fas fa-check unit-check"></i>' : ''}
             </button>
@@ -216,15 +285,15 @@ function generateUnitOptions(productName, supplierName, currentUnit) {
 
 // Função para voltar à página principal
 function goBackToMain() {
-    console.log('Voltando para página principal...');
+    log('Voltando para página principal...');
     
     // Verificar se há dados salvos e mantê-los
     const savedData = localStorage.getItem('canaverdeData');
     if (savedData) {
-        console.log('Dados encontrados, mantendo no localStorage:', savedData);
+        log('Dados encontrados, mantendo no localStorage:', savedData);
         // Os dados já estão salvos, apenas navegar
     } else {
-        console.log('Nenhum dado encontrado no localStorage');
+        log('Nenhum dado encontrado no localStorage');
     }
     
     // Adicionar parâmetro para indicar que estamos voltando da página de fornecedores
@@ -233,32 +302,32 @@ function goBackToMain() {
 
 // Função para carregar dados na página de fornecedores
 function loadSuppliersData() {
-    console.log('Iniciando carregamento de dados...');
+    log('Iniciando carregamento de dados...');
     const savedData = localStorage.getItem('canaverdeData');
     
     if (!savedData) {
-        console.log('Nenhum dado encontrado no localStorage');
+        log('Nenhum dado encontrado no localStorage');
         showNoDataMessage();
         return;
     }
     
-    console.log('Dados encontrados no localStorage:', savedData);
+    log('Dados encontrados no localStorage:', savedData);
     
     try {
         const data = JSON.parse(savedData);
-        console.log('Dados parseados:', data);
+        log('Dados parseados:', data);
         
         // Verificar se há dados válidos
         if (!data.data || data.data.length === 0) {
-            console.log('Dados inválidos ou vazios');
+            log('Dados inválidos ou vazios');
             showNoDataMessage();
             return;
         }
         
-        console.log(`Encontrados ${data.data.length} itens de dados`);
-        console.log(`Fornecedores: ${data.suppliers ? data.suppliers.length : 0}`);
-        console.log(`Produtos: ${data.products ? data.products.length : 0}`);
-        console.log(`Menores preços: ${data.lowestPrices ? data.lowestPrices.length : 0}`);
+        log(`Encontrados ${data.data.length} itens de dados`);
+        log(`Fornecedores: ${data.suppliers ? data.suppliers.length : 0}`);
+        log(`Produtos: ${data.products ? data.products.length : 0}`);
+        log(`Menores preços: ${data.lowestPrices ? data.lowestPrices.length : 0}`);
 
         applyProductMemory(data);
         
@@ -322,13 +391,13 @@ function createSupplierCards(data) {
     const container = document.getElementById('suppliersContainer');
     if (!container) return;
     
-    console.log('Criando cards de fornecedores com dados:', data);
+    log('Criando cards de fornecedores com dados:', data);
     
     // Agrupar produtos por fornecedor - APENAS os com menores preços
     const supplierGroups = {};
     const lowestPricesMap = new Map(data.lowestPrices || []);
     
-    console.log('Mapa de menores preços:', lowestPricesMap);
+    log('Mapa de menores preços:', lowestPricesMap);
     
     // Filtrar apenas produtos com menores preços e garantir unicidade
     const lowestPriceProducts = [];
@@ -342,19 +411,19 @@ function createSupplierCards(data) {
         }
     });
     
-    console.log('Produtos com menores preços:', lowestPriceProducts);
-    console.log('Total de produtos com menores preços:', lowestPriceProducts.length);
+    log('Produtos com menores preços:', lowestPriceProducts);
+    log('Total de produtos com menores preços:', lowestPriceProducts.length);
     
     lowestPriceProducts.forEach((item, index) => {
-        console.log(`Processando produto ${index + 1}: ${item.product} - ${item.supplier}`);
+        log(`Processando produto ${index + 1}: ${item.product} - ${item.supplier}`);
         if (!supplierGroups[item.supplier]) {
             supplierGroups[item.supplier] = [];
         }
         supplierGroups[item.supplier].push(item);
     });
     
-    console.log('Grupos de fornecedores (apenas menores preços):', supplierGroups);
-    console.log('Total de grupos:', Object.keys(supplierGroups).length);
+    log('Grupos de fornecedores (apenas menores preços):', supplierGroups);
+    log('Total de grupos:', Object.keys(supplierGroups).length);
     
     // Se não há fornecedores, mostrar mensagem
     if (Object.keys(supplierGroups).length === 0) {
@@ -366,18 +435,18 @@ function createSupplierCards(data) {
     const originalSupplierOrder = [...new Set(data.data.map(item => item.supplier))];
     const orderedSuppliers = originalSupplierOrder.filter(supplier => supplierGroups[supplier]);
     
-    console.log('Ordem original dos fornecedores:', originalSupplierOrder);
-    console.log('Fornecedores com produtos (ordenados):', orderedSuppliers);
+    log('Ordem original dos fornecedores:', originalSupplierOrder);
+    log('Fornecedores com produtos (ordenados):', orderedSuppliers);
     
     // Criar HTML para cada fornecedor na ordem original
-    const suppliersHtml = orderedSuppliers.map(supplier => {
+    const suppliersHtml = orderedSuppliers.map((supplier, index) => {
         const products = supplierGroups[supplier];
         
-        console.log(`Fornecedor: ${supplier}, Produtos com menor preço: ${products.length}`);
-        console.log(`Produtos do fornecedor ${supplier}:`, products.map(p => p.product));
+        log(`Fornecedor: ${supplier}, Produtos com menor preço: ${products.length}`);
+        log(`Produtos do fornecedor ${supplier}:`, products.map(p => p.product));
         
         const productsHtml = products.map((product, index) => {
-            console.log(`Renderizando produto ${index + 1}/${products.length}: ${product.product}`);
+            log(`Renderizando produto ${index + 1}/${products.length}: ${product.product}`);
             const savedQty = getSavedQuantity(product.product);
             const quantity = product.quantity > 0 ? product.quantity : savedQty;
             const isFromHistory = (!product.quantity || product.quantity === 0) && savedQty > 0;
@@ -386,32 +455,37 @@ function createSupplierCards(data) {
             const unitTypeInfo = UNIT_TYPES.find(u => u.id === currentUnit);
             const unitOptionsHtml = generateUnitOptions(product.product, product.supplier, currentUnit);
             
-            console.log(`Produto: ${product.product}, Qtd: ${quantity}`);
+            log(`Produto: ${product.product}, Qtd: ${quantity}`);
             
+            const safeProduct = escapeHtml(product.product);
+            const safeSupplier = escapeHtml(product.supplier);
+            const packSize = getEffectivePackSize(product.product, currentUnit);
+            const unitLabel = unitTypeInfo ? unitTypeInfo.label : currentUnit;
+            const itemTotal = quantity * packSize * product.price;
             return `
                 <div class="product-item lowest-price" 
                      draggable="true" 
-                     data-product="${product.product}"
-                     data-supplier="${product.supplier}"
+                     data-product="${safeProduct}"
+                     data-supplier="${safeSupplier}"
                      data-unit-price="${product.price}"
                      ondragstart="handleDragStart(event)"
                      ondragend="handleDragEnd(event)">
                     <div class="product-header">
-                        <span class="product-name">${product.product}</span>
+                        <span class="product-name">${safeProduct}</span>
                         <div class="product-actions">
                             <div class="product-menu-container">
                                 <button class="product-menu-btn" onclick="toggleProductMenu(event)" title="Opções">
                                     <i class="fas fa-ellipsis-v"></i>
                                 </button>
                                 <div class="product-menu-dropdown">
-                                    <button class="menu-option" onclick="showPriceComparison('${product.product}', '${product.supplier}'); closeAllMenus();">
+                                    <button class="menu-option" data-action="compare" data-product="${safeProduct}" data-supplier="${safeSupplier}">
                                         <i class="fas fa-balance-scale"></i> Comparar Preços
                                     </button>
                                     <div class="menu-divider"></div>
                                     <div class="menu-section-label"><i class="fas fa-ruler"></i> Unidade</div>
                                     ${unitOptionsHtml}
                                     <div class="menu-divider"></div>
-                                    <button class="menu-option remove-option" onclick="removeProduct('${product.product}', '${product.supplier}'); closeAllMenus();">
+                                    <button class="menu-option remove-option" data-action="remove" data-product="${safeProduct}" data-supplier="${safeSupplier}">
                                         <i class="fas fa-trash-alt"></i> Remover
                                     </button>
                                 </div>
@@ -429,12 +503,25 @@ function createSupplierCards(data) {
                                    step="1"
                                    placeholder="0"
                                    title="${isFromHistory ? 'Quantidade da última compra' : ''}"
-                                   data-product="${product.product}"
-                                   data-supplier="${product.supplier}"
+                                   data-product="${safeProduct}"
+                                   data-supplier="${safeSupplier}"
                                    data-unit-price="${product.price}"
                                    oninput="updateSupplierQuantity(this)"
                                    onchange="updateSupplierQuantity(this)">
-                            <span class="unit-badge${unitAuto ? ' unit-auto' : ''}" title="${unitAuto ? `Detectado: ${unitTypeInfo ? unitTypeInfo.label : currentUnit}` : (unitTypeInfo ? unitTypeInfo.label : currentUnit)}">${currentUnit}</span>
+                            <span class="unit-badge${unitAuto ? ' unit-auto' : ''}" title="${unitAuto ? `Detectado: ${escapeHtml(unitLabel)}` : escapeHtml(unitLabel)}">${escapeHtml(currentUnit)}</span>
+                        </div>
+                        <div class="product-detail pack-size-detail">
+                            <span class="product-detail-label">Itens por ${escapeHtml(currentUnit)}:</span>
+                            <input type="number"
+                                   class="pack-size-input"
+                                   value="${packSize}"
+                                   min="1"
+                                   step="1"
+                                   title="Quantos itens vêm em 1 ${escapeHtml(unitLabel.toLowerCase())}. O total = quantidade × itens por embalagem × preço unitário."
+                                   data-product="${safeProduct}"
+                                   oninput="updatePackSize(this)"
+                                   onchange="updatePackSize(this)">
+                            <span class="pack-size-hint">un/${escapeHtml(currentUnit)}</span>
                         </div>
                         <div class="product-detail">
                             <span class="product-detail-label">Preço Unit.:</span>
@@ -442,14 +529,19 @@ function createSupplierCards(data) {
                                 R$ ${product.price.toFixed(2).replace('.', ',')}
                             </span>
                         </div>
+                        <div class="product-detail product-total-detail">
+                            <span class="product-detail-label">Total:</span>
+                            <span class="product-detail-value product-item-total">${formatCurrency(itemTotal)}</span>
+                        </div>
                     </div>
                 </div>
             `;
         }).join('');
         
+        const safeSupplierCard = escapeHtml(supplier);
         return `
             <div class="supplier-card" 
-                 data-supplier="${supplier}"
+                 data-supplier="${safeSupplierCard}"
                  ondragover="handleDragOver(event)"
                  ondrop="handleDrop(event)"
                  ondragenter="handleDragEnter(event)"
@@ -457,7 +549,7 @@ function createSupplierCards(data) {
                 <div class="supplier-header">
                     <div class="supplier-name">
                         <i class="fas fa-store"></i>
-                        ${supplier}
+                        ${safeSupplierCard}
                     </div>
                     <div class="supplier-stats">
                         <div class="supplier-stat">
@@ -473,14 +565,13 @@ function createSupplierCards(data) {
                 <div class="products-list">
                     ${productsHtml}
                 </div>
-                <button class="copy-btn" onclick="copySupplierText('${supplier}')">
+                <button class="copy-btn" data-action="copy-supplier" data-supplier="${safeSupplierCard}">
                     <i class="fas fa-copy"></i>
                     Copiar Lista para WhatsApp
                 </button>
-                <div class="supplier-finished" id="finished-${supplier.replace(/\s+/g, '-')}">
-                    <input type="checkbox" id="checkbox-${supplier.replace(/\s+/g, '-')}" 
-                           onchange="toggleSupplierFinished('${supplier}')">
-                    <label for="checkbox-${supplier.replace(/\s+/g, '-')}">
+                <div class="supplier-finished">
+                    <input type="checkbox" class="supplier-finished-checkbox" id="finished-check-${index}" data-supplier="${safeSupplierCard}">
+                    <label for="finished-check-${index}">
                         Marcar como finalizado
                     </label>
                 </div>
@@ -503,10 +594,21 @@ function updateSupplierQuantity(input) {
     const supplier = input.dataset.supplier;
     const quantity = parseInt(input.value) || 0;
     
-    console.log(`Atualizando quantidade: ${product} - ${supplier} - Qtd: ${quantity}`);
+    log(`Atualizando quantidade: ${product} - ${supplier} - Qtd: ${quantity}`);
     
     updateSupplierStats();
     saveUpdatedData();
+}
+
+// Função para atualizar itens por embalagem
+function updatePackSize(input) {
+    const product = input.dataset.product;
+    const packSize = parseInt(input.value) || 0;
+    
+    log(`Atualizando itens por embalagem: ${product} -> ${packSize}`);
+    
+    savePackSize(product, packSize);
+    updateSupplierStats();
 }
 
 // Função para calcular totais por fornecedor e total geral
@@ -516,10 +618,19 @@ function updateSupplierStats() {
     document.querySelectorAll('.supplier-card').forEach(card => {
         let supplierTotal = 0;
 
-        card.querySelectorAll('.quantity-input-supplier').forEach(input => {
+        card.querySelectorAll('.product-item').forEach(item => {
+            const input = item.querySelector('.quantity-input-supplier');
+            const packInput = item.querySelector('.pack-size-input');
+            if (!input) return;
             const quantity = parseInt(input.value) || 0;
             const unitPrice = parseFloat(input.dataset.unitPrice) || 0;
-            supplierTotal += quantity * unitPrice;
+            const packSize = packInput ? (parseInt(packInput.value) || 1) : 1;
+            const itemTotal = quantity * packSize * unitPrice;
+            supplierTotal += itemTotal;
+
+            // Atualizar o total exibido no próprio produto
+            const itemTotalEl = item.querySelector('.product-item-total');
+            if (itemTotalEl) itemTotalEl.textContent = formatCurrency(itemTotal);
         });
 
         grandTotal += supplierTotal;
@@ -566,7 +677,7 @@ function saveUpdatedData() {
         
         // Salvar dados atualizados
         localStorage.setItem('canaverdeData', JSON.stringify(data));
-        console.log('Dados atualizados salvos no localStorage');
+        log('Dados atualizados salvos no localStorage');
         
     } catch (error) {
         console.error('Erro ao salvar dados atualizados:', error);
@@ -624,8 +735,8 @@ function handleDragStart(event) {
         unitPrice: parseFloat(productItem.dataset.unitPrice)
     };
     
-    console.log('Iniciando drag:', draggedData);
-    console.log('Elemento sendo arrastado:', productItem);
+    log('Iniciando drag:', draggedData);
+    log('Elemento sendo arrastado:', productItem);
     
     productItem.style.opacity = '0.5';
     event.dataTransfer.effectAllowed = 'move';
@@ -657,14 +768,14 @@ function handleDragEnd(event) {
 function handleDragOver(event) {
     event.preventDefault();
     event.dataTransfer.dropEffect = 'move';
-    console.log('Drag over fornecedor:', event.currentTarget.dataset.supplier);
+    log('Drag over fornecedor:', event.currentTarget.dataset.supplier);
 }
 
 function handleDragEnter(event) {
     event.preventDefault();
     const supplierCard = event.currentTarget;
     supplierCard.classList.add('drag-over');
-    console.log('Drag enter fornecedor:', supplierCard.dataset.supplier);
+    log('Drag enter fornecedor:', supplierCard.dataset.supplier);
 }
 
 function handleDragLeave(event) {
@@ -672,7 +783,7 @@ function handleDragLeave(event) {
     // Verificar se realmente saiu do card
     if (!supplierCard.contains(event.relatedTarget)) {
         supplierCard.classList.remove('drag-over');
-        console.log('Drag leave fornecedor:', supplierCard.dataset.supplier);
+        log('Drag leave fornecedor:', supplierCard.dataset.supplier);
     }
 }
 
@@ -681,9 +792,9 @@ function handleDrop(event) {
     const supplierCard = event.currentTarget;
     const newSupplier = supplierCard.dataset.supplier;
     
-    console.log('=== DROP EVENT TRIGGERED ===');
-    console.log('Novo fornecedor:', newSupplier);
-    console.log('Dados do produto arrastado (global):', draggedData);
+    log('=== DROP EVENT TRIGGERED ===');
+    log('Novo fornecedor:', newSupplier);
+    log('Dados do produto arrastado (global):', draggedData);
     
     supplierCard.classList.remove('drag-over');
     
@@ -692,18 +803,18 @@ function handleDrop(event) {
         return;
     }
     
-    console.log(`Movendo ${draggedData.product} de ${draggedData.supplier} para ${newSupplier}`);
-    console.log('Fornecedor atual:', draggedData.supplier);
-    console.log('Novo fornecedor:', newSupplier);
-    console.log('São diferentes?', draggedData.supplier !== newSupplier);
+    log(`Movendo ${draggedData.product} de ${draggedData.supplier} para ${newSupplier}`);
+    log('Fornecedor atual:', draggedData.supplier);
+    log('Novo fornecedor:', newSupplier);
+    log('São diferentes?', draggedData.supplier !== newSupplier);
     
     // Verificar se não está tentando mover para o mesmo fornecedor
     if (draggedData.supplier === newSupplier) {
-        console.log('❌ Tentativa de mover para o mesmo fornecedor, ignorando...');
+        log('❌ Tentativa de mover para o mesmo fornecedor, ignorando...');
         return;
     }
     
-    console.log('✅ Fornecedores diferentes, prosseguindo...');
+    log('✅ Fornecedores diferentes, prosseguindo...');
     
     // Encontrar o novo preço para este produto neste fornecedor
     const savedData = localStorage.getItem('canaverdeData');
@@ -711,11 +822,11 @@ function handleDrop(event) {
     
     try {
         const data = JSON.parse(savedData);
-        console.log('Dados carregados do localStorage:', data);
+        log('Dados carregados do localStorage:', data);
         
         // Encontrar o item com o novo preço - busca mais robusta
-        console.log('Procurando produto:', draggedData.product);
-        console.log('No fornecedor:', newSupplier);
+        log('Procurando produto:', draggedData.product);
+        log('No fornecedor:', newSupplier);
         
         // Buscar por nome exato primeiro
         let newPriceItem = data.data.find(item => 
@@ -724,25 +835,25 @@ function handleDrop(event) {
         
         // Se não encontrar, buscar por similaridade (caso haja diferenças de espaços, etc.)
         if (!newPriceItem) {
-            console.log('Busca exata falhou, tentando busca por similaridade...');
+            log('Busca exata falhou, tentando busca por similaridade...');
             newPriceItem = data.data.find(item => 
                 item.product.trim() === draggedData.product.trim() && 
                 item.supplier.trim() === newSupplier.trim()
             );
         }
         
-        console.log('Item encontrado no novo fornecedor:', newPriceItem);
+        log('Item encontrado no novo fornecedor:', newPriceItem);
         
         if (!newPriceItem) {
-            console.log(`⚠️ Produto ${draggedData.product} não encontrado no fornecedor ${newSupplier}`);
-            console.log('Produtos disponíveis no fornecedor:', data.data.filter(item => item.supplier === newSupplier));
+            log(`⚠️ Produto ${draggedData.product} não encontrado no fornecedor ${newSupplier}`);
+            log('Produtos disponíveis no fornecedor:', data.data.filter(item => item.supplier === newSupplier));
             
             // Tentar encontrar o produto em qualquer fornecedor para debug
             const productInAnySupplier = data.data.find(item => item.product === draggedData.product);
-            console.log('Produto encontrado em outro fornecedor:', productInAnySupplier);
+            log('Produto encontrado em outro fornecedor:', productInAnySupplier);
             
             // Se o produto não existe no fornecedor de destino, criar um novo item
-            console.log('🔄 Criando novo item para o fornecedor de destino...');
+            log('🔄 Criando novo item para o fornecedor de destino...');
             
             // Encontrar o preço mais próximo ou usar o preço atual
             const newPrice = draggedData.unitPrice; // Usar o preço atual como base
@@ -758,24 +869,24 @@ function handleDrop(event) {
             
             // Adicionar o novo item aos dados
             data.data.push(newItem);
-            console.log('✅ Novo item criado:', newItem);
+            log('✅ Novo item criado:', newItem);
             
             // Usar o novo item como newPriceItem
             newPriceItem = newItem;
         }
         
-        console.log('✅ Produto encontrado! Prosseguindo com a atualização...');
+        log('✅ Produto encontrado! Prosseguindo com a atualização...');
         
         // Atualizar os dados
         updateProductSupplier(data, draggedData.product, draggedData.supplier, newSupplier, newPriceItem.price);
         
         // Recriar a interface mantendo a ordem
-        console.log('🔄 Recriando interface com dados atualizados...');
+        log('🔄 Recriando interface com dados atualizados...');
         createSupplierCards(data);
         updateStats(data);
         
-        console.log(`✅ Produto movido com sucesso! Novo preço: R$ ${newPriceItem.price.toFixed(2)}`);
-        console.log('Total de produtos após movimentação:', data.data.length);
+        log(`✅ Produto movido com sucesso! Novo preço: R$ ${newPriceItem.price.toFixed(2)}`);
+        log('Total de produtos após movimentação:', data.data.length);
         
     } catch (error) {
         console.error('❌ Erro ao processar drop:', error);
@@ -784,7 +895,7 @@ function handleDrop(event) {
 }
 
 function updateProductSupplier(data, productName, oldSupplier, newSupplier, newPrice) {
-    console.log(`Atualizando produto: ${productName} de ${oldSupplier} para ${newSupplier}`);
+    log(`Atualizando produto: ${productName} de ${oldSupplier} para ${newSupplier}`);
     
     // Remover do fornecedor antigo
     const oldItem = data.data.find(item => 
@@ -796,8 +907,8 @@ function updateProductSupplier(data, productName, oldSupplier, newSupplier, newP
         item.product === productName && item.supplier === newSupplier
     );
     
-    console.log('Item antigo encontrado:', oldItem);
-    console.log('Item novo encontrado:', newItem);
+    log('Item antigo encontrado:', oldItem);
+    log('Item novo encontrado:', newItem);
     
     if (oldItem && newItem) {
         // Transferir quantidade se existir
@@ -807,15 +918,15 @@ function updateProductSupplier(data, productName, oldSupplier, newSupplier, newP
         // Limpar quantidade do item antigo
         oldItem.quantity = 0;
         
-        console.log(`Quantidade transferida: ${quantity}`);
+        log(`Quantidade transferida: ${quantity}`);
         
         // Atualizar menores preços
         const lowestPricesMap = new Map(data.lowestPrices);
         const oldKey = `${productName}-${oldSupplier}`;
         const newKey = `${productName}-${newSupplier}`;
         
-        console.log('Chaves de menores preços:', { oldKey, newKey });
-        console.log('Mapa antes da atualização:', lowestPricesMap);
+        log('Chaves de menores preços:', { oldKey, newKey });
+        log('Mapa antes da atualização:', lowestPricesMap);
         
         // Remover do fornecedor antigo
         lowestPricesMap.delete(oldKey);
@@ -823,7 +934,7 @@ function updateProductSupplier(data, productName, oldSupplier, newSupplier, newP
         // Adicionar ao novo fornecedor
         lowestPricesMap.set(newKey, newPrice);
         
-        console.log('Mapa após atualização:', lowestPricesMap);
+        log('Mapa após atualização:', lowestPricesMap);
         
         data.lowestPrices = Array.from(lowestPricesMap.entries());
         
@@ -843,17 +954,17 @@ function updateProductSupplier(data, productName, oldSupplier, newSupplier, newP
         // Salvar dados atualizados
         localStorage.setItem('canaverdeData', JSON.stringify(data));
         
-        console.log(`Produto ${productName} movido de ${oldSupplier} para ${newSupplier}`);
-        console.log('Dados salvos no localStorage');
+        log(`Produto ${productName} movido de ${oldSupplier} para ${newSupplier}`);
+        log('Dados salvos no localStorage');
     }
 }
 
 // Função para copiar texto do fornecedor formatado para WhatsApp
 function copySupplierText(supplierName) {
-    console.log(`Copiando texto do fornecedor: ${supplierName}`);
+    log(`Copiando texto do fornecedor: ${supplierName}`);
     
-    // Encontrar o card do fornecedor
-    const supplierCard = document.querySelector(`[data-supplier="${supplierName}"]`);
+    // Encontrar o card do fornecedor (busca segura, mesmo com aspas no nome)
+    const supplierCard = findSupplierCard(supplierName);
     if (!supplierCard) {
         console.error('Card do fornecedor não encontrado');
         return;
@@ -877,12 +988,18 @@ function copySupplierText(supplierName) {
     whatsappText += `📋 *Lista de Produtos:*\n`;
     
     let hasProducts = false;
+    let orderTotal = 0;
     products.forEach((product, index) => {
         const productName = product.querySelector('.product-name').textContent;
         const quantityInput = product.querySelector('.quantity-input-supplier');
+        const packInput = product.querySelector('.pack-size-input');
         const unitPrice = product.querySelector('.product-detail-value').textContent;
         
-        const quantity = quantityInput.value || '0';
+        const quantity = parseInt(quantityInput.value) || 0;
+        const packSize = packInput ? (parseInt(packInput.value) || 1) : 1;
+        const price = parseFloat(quantityInput.dataset.unitPrice) || 0;
+        const itemTotal = quantity * packSize * price;
+        orderTotal += itemTotal;
         const unitBadge = product.querySelector('.unit-badge');
         const unit = unitBadge ? unitBadge.textContent.trim() : 'cx';
         
@@ -890,11 +1007,19 @@ function copySupplierText(supplierName) {
         const cleanPrice = unitPrice.replace(/\s+/g, ' ').trim();
         
         whatsappText += `${index + 1}. *${productName}*\n`;
-        whatsappText += `   • Quantidade: ${quantity} ${unit}\n`;
-        whatsappText += `   • Preço Unit.: ${cleanPrice}\n\n\n`;
+        whatsappText += `   • Quantidade: ${quantity} ${unit}${packSize > 1 ? ` (${packSize} un/${unit})` : ''}\n`;
+        whatsappText += `   • Preço Unit.: ${cleanPrice}\n`;
+        if (itemTotal > 0) {
+            whatsappText += `   • Total: ${formatCurrency(itemTotal)}\n`;
+        }
+        whatsappText += `\n`;
         
         hasProducts = true;
     });
+    
+    if (orderTotal > 0) {
+        whatsappText += `💵 *Total do Pedido: ${formatCurrency(orderTotal)}*\n`;
+    }
     
     if (!hasProducts) {
         whatsappText += `Nenhum produto com quantidade definida.\n\n`;
@@ -905,7 +1030,7 @@ function copySupplierText(supplierName) {
     
     // Copiar para área de transferência
     navigator.clipboard.writeText(whatsappText).then(() => {
-        console.log('Texto copiado com sucesso!');
+        log('Texto copiado com sucesso!');
         
         // Feedback visual
         const button = supplierCard.querySelector('.copy-btn');
@@ -939,15 +1064,18 @@ function showNotification(message, type = 'info') {
         existingNotification.remove();
     }
     
-    // Criar nova notificação
+    // Criar nova notificação (texto inserido via textContent, seguro para qualquer nome de produto)
     const notification = document.createElement('div');
     notification.className = `notification notification-${type}`;
-    notification.innerHTML = `
-        <div class="notification-content">
-            <i class="fas fa-info-circle"></i>
-            <span>${message}</span>
-        </div>
-    `;
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'notification-content';
+    const iconEl = document.createElement('i');
+    iconEl.className = 'fas fa-info-circle';
+    const spanEl = document.createElement('span');
+    spanEl.textContent = message;
+    contentDiv.appendChild(iconEl);
+    contentDiv.appendChild(spanEl);
+    notification.appendChild(contentDiv);
     
     // Adicionar estilos inline para a notificação
     const bgColor = type === 'success' ? '#28a745' : type === 'error' ? '#dc3545' : '#17a2b8';
@@ -1018,13 +1146,13 @@ function showTextModal(text, supplierName) {
     modal.innerHTML = `
         <div class="modal-content">
             <div class="modal-header">
-                <h3>📋 Lista do Fornecedor: ${supplierName}</h3>
+                <h3>📋 Lista do Fornecedor: ${escapeHtml(supplierName)}</h3>
                 <button class="modal-close" onclick="this.closest('.text-modal').remove()">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
             <div class="modal-body">
-                <textarea readonly>${text}</textarea>
+                <textarea readonly>${escapeHtml(text)}</textarea>
                 <div class="modal-actions">
                     <button class="btn" onclick="copyTextFromModal(this)">
                         <i class="fas fa-copy"></i> Copiar Texto
@@ -1135,10 +1263,9 @@ function copyTextFromModal(button) {
 }
 
 // Função para alternar estado do checkbox de fornecedor finalizado
-function toggleSupplierFinished(supplierName) {
-    const checkboxId = `checkbox-${supplierName.replace(/\s+/g, '-')}`;
-    const checkbox = document.getElementById(checkboxId);
-    const finishedDiv = document.getElementById(`finished-${supplierName.replace(/\s+/g, '-')}`);
+function toggleSupplierFinished(checkbox) {
+    const supplierName = checkbox.dataset.supplier;
+    const finishedDiv = checkbox.closest('.supplier-finished');
     
     if (checkbox && finishedDiv) {
         const isChecked = checkbox.checked;
@@ -1164,30 +1291,28 @@ function saveCheckboxState(supplierName, isFinished) {
     const finishedSuppliers = JSON.parse(localStorage.getItem('finishedSuppliers') || '{}');
     finishedSuppliers[supplierName] = isFinished;
     localStorage.setItem('finishedSuppliers', JSON.stringify(finishedSuppliers));
-    console.log(`Estado do fornecedor ${supplierName} salvo: ${isFinished}`);
+    log(`Estado do fornecedor ${supplierName} salvo: ${isFinished}`);
 }
 
 // Função para restaurar estado dos checkboxes
 function restoreCheckboxStates() {
     const finishedSuppliers = JSON.parse(localStorage.getItem('finishedSuppliers') || '{}');
     
-    Object.keys(finishedSuppliers).forEach(supplierName => {
-        const checkboxId = `checkbox-${supplierName.replace(/\s+/g, '-')}`;
-        const checkbox = document.getElementById(checkboxId);
-        const finishedDiv = document.getElementById(`finished-${supplierName.replace(/\s+/g, '-')}`);
-        
-        if (checkbox && finishedDiv && finishedSuppliers[supplierName]) {
+    document.querySelectorAll('.supplier-finished-checkbox').forEach(checkbox => {
+        const supplierName = checkbox.dataset.supplier;
+        if (finishedSuppliers[supplierName]) {
             checkbox.checked = true;
-            finishedDiv.classList.add('checked');
+            const finishedDiv = checkbox.closest('.supplier-finished');
+            if (finishedDiv) finishedDiv.classList.add('checked');
         }
     });
     
-    console.log('Estados dos checkboxes restaurados:', finishedSuppliers);
+    log('Estados dos checkboxes restaurados:', finishedSuppliers);
 }
 
 // Função para remover produto
 function removeProduct(productName, supplierName) {
-    console.log(`Removendo produto: ${productName} do fornecedor: ${supplierName}`);
+    log(`Removendo produto: ${productName} do fornecedor: ${supplierName}`);
     
     // Confirmar remoção
     if (!confirm(`Deseja remover "${productName}" do fornecedor "${supplierName}"?`)) {
@@ -1271,21 +1396,22 @@ function updateRemovedProductsSection() {
     let html = '';
     Object.keys(groupedBySupplier).forEach(supplier => {
         const products = groupedBySupplier[supplier];
+        const safeGroupSupplier = escapeHtml(supplier);
         html += `
             <div class="removed-supplier-group">
                 <div class="removed-supplier-header">
                     <i class="fas fa-store"></i>
-                    <strong>${supplier}</strong>
+                    <strong>${safeGroupSupplier}</strong>
                     <span class="removed-count">${products.length} produto(s)</span>
                 </div>
                 <div class="removed-products-list">
                     ${products.map(item => `
                         <div class="removed-product-item">
                             <div class="removed-product-info">
-                                <span class="removed-product-name">${item.product}</span>
+                                <span class="removed-product-name">${escapeHtml(item.product)}</span>
                                 <span class="removed-product-price">R$ ${item.price.toFixed(2).replace('.', ',')}</span>
                             </div>
-                            <button class="restore-product-btn" onclick="restoreProduct('${item.product}', '${item.supplier}')">
+                            <button class="restore-product-btn" data-action="restore" data-product="${escapeHtml(item.product)}" data-supplier="${escapeHtml(item.supplier)}">
                                 <i class="fas fa-undo"></i> Restaurar
                             </button>
                         </div>
@@ -1300,7 +1426,7 @@ function updateRemovedProductsSection() {
 
 // Função para restaurar produto
 function restoreProduct(productName, supplierName) {
-    console.log(`Restaurando produto: ${productName} para fornecedor: ${supplierName}`);
+    log(`Restaurando produto: ${productName} para fornecedor: ${supplierName}`);
     
     const savedData = localStorage.getItem('canaverdeData');
     const removedProducts = JSON.parse(localStorage.getItem('removedProducts') || '[]');
@@ -1435,7 +1561,7 @@ function closeAllMenus() {
 
 // Função para mostrar comparação de preços entre fornecedores
 function showPriceComparison(productName, currentSupplier) {
-    console.log(`Comparando preços para: ${productName} (fornecedor atual: ${currentSupplier})`);
+    log(`Comparando preços para: ${productName} (fornecedor atual: ${currentSupplier})`);
     
     const savedData = localStorage.getItem('canaverdeData');
     if (!savedData) {
@@ -1494,7 +1620,7 @@ function showPriceComparison(productName, currentSupplier) {
             if (isCurrent) {
                 selectBtn = '<div class="comparison-select-current"><i class="fas fa-check-circle"></i> Selecionado</div>';
             } else {
-                selectBtn = `<button class="comparison-select-btn" data-product="${productName}" data-old-supplier="${currentSupplier}" data-new-supplier="${item.supplier}" data-new-price="${item.price}"><i class="fas fa-exchange-alt"></i> Selecionar</button>`;
+                selectBtn = `<button class="comparison-select-btn" data-product="${escapeHtml(productName)}" data-old-supplier="${escapeHtml(currentSupplier)}" data-new-supplier="${escapeHtml(item.supplier)}" data-new-price="${item.price}"><i class="fas fa-exchange-alt"></i> Selecionar</button>`;
             }
             
             return `
@@ -1503,7 +1629,7 @@ function showPriceComparison(productName, currentSupplier) {
                     <div class="comparison-info">
                         <div class="comparison-supplier">
                             <i class="fas fa-store"></i>
-                            ${item.supplier}
+                            ${escapeHtml(item.supplier)}
                         </div>
                         <div class="comparison-badges">${badges}</div>
                         ${diffText}
@@ -1531,7 +1657,7 @@ function showPriceComparison(productName, currentSupplier) {
                 </div>
                 <div class="comparison-product-name">
                     <i class="fas fa-box"></i>
-                    ${productName}
+                    ${escapeHtml(productName)}
                 </div>
                 <div class="comparison-list">
                     ${comparisonItems}
@@ -1574,7 +1700,7 @@ function showPriceComparison(productName, currentSupplier) {
 
 // Função para trocar o produto de fornecedor a partir da comparação
 function switchProductSupplier(productName, oldSupplier, newSupplier, newPrice) {
-    console.log(`Trocando ${productName} de ${oldSupplier} para ${newSupplier} (R$ ${newPrice})`);
+    log(`Trocando ${productName} de ${oldSupplier} para ${newSupplier} (R$ ${newPrice})`);
     
     const savedData = localStorage.getItem('canaverdeData');
     if (!savedData) return;
@@ -1595,7 +1721,7 @@ function switchProductSupplier(productName, oldSupplier, newSupplier, newPrice) 
         // Mostrar notificação de sucesso
         showNotification(`✅ "${productName}" movido para ${newSupplier} (R$ ${newPrice.toFixed(2).replace('.', ',')})`, 'success');
         
-        console.log(`Produto ${productName} movido de ${oldSupplier} para ${newSupplier}`);
+        log(`Produto ${productName} movido de ${oldSupplier} para ${newSupplier}`);
         
     } catch (error) {
         console.error('Erro ao trocar fornecedor:', error);
@@ -1618,7 +1744,7 @@ function closePriceComparison() {
 
 // Função para exportar planilha Excel com células selecionadas em amarelo
 async function exportHighlightedExcel() {
-    console.log('Exportando planilha com destaques...');
+    log('Exportando planilha com destaques...');
     
     const savedData = localStorage.getItem('canaverdeData');
     if (!savedData) {
@@ -1835,7 +1961,7 @@ async function exportHighlightedExcel() {
         URL.revokeObjectURL(url);
         
         showNotification('✅ Planilha exportada com sucesso!', 'success');
-        console.log('Planilha exportada com destaques amarelos');
+        log('Planilha exportada com destaques amarelos');
         
     } catch (error) {
         console.error('Erro ao exportar planilha:', error);
@@ -1878,13 +2004,57 @@ function resetAllData() {
         
         showNotification('✅ Tudo foi resetado ao estado original da planilha!', 'success');
         
-        console.log('Dados resetados ao estado original');
+        log('Dados resetados ao estado original');
         
     } catch (error) {
         console.error('Erro ao resetar dados:', error);
         showNotification('❌ Erro ao resetar dados', 'error');
     }
 }
+
+// ===== Event delegation global =====
+// Trata cliques nas opções dos menus (inclusive dentro do portal), botão de copiar e restaurar.
+// Usar data-attributes em vez de onclick inline funciona com QUALQUER nome de produto/fornecedor
+// (inclusive nomes com aspas e apóstrofos, que antes quebravam a página).
+document.addEventListener('click', function(event) {
+    const actionEl = event.target.closest('[data-action]');
+    if (!actionEl) return;
+
+    const action = actionEl.dataset.action;
+    const product = actionEl.dataset.product;
+    const supplier = actionEl.dataset.supplier;
+
+    switch (action) {
+        case 'compare':
+            event.stopPropagation();
+            showPriceComparison(product, supplier);
+            closeAllMenus();
+            break;
+        case 'change-unit':
+            event.stopPropagation();
+            changeUnit(product, supplier, actionEl.dataset.unitId);
+            closeAllMenus();
+            break;
+        case 'remove':
+            event.stopPropagation();
+            removeProduct(product, supplier);
+            closeAllMenus();
+            break;
+        case 'copy-supplier':
+            copySupplierText(supplier);
+            break;
+        case 'restore':
+            restoreProduct(product, supplier);
+            break;
+    }
+});
+
+// Checkbox de "fornecedor finalizado"
+document.addEventListener('change', function(event) {
+    if (event.target.classList && event.target.classList.contains('supplier-finished-checkbox')) {
+        toggleSupplierFinished(event.target);
+    }
+});
 
 // Fechar menus ao clicar fora
 document.addEventListener('click', function(event) {
@@ -1915,7 +2085,7 @@ document.addEventListener('mousemove', (event) => {
 
 // Carregar dados quando a página carregar
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('Página de fornecedores carregada');
+    log('Página de fornecedores carregada');
     loadSuppliersData();
     updateRemovedProductsSection();
 });

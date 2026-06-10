@@ -1,3 +1,18 @@
+// ===== Utilitários globais =====
+// Modo de depuração: mude para true para ver logs detalhados no console
+const DEBUG = false;
+const log = (...args) => { if (DEBUG) log(...args); };
+
+// Escapa texto vindo da planilha antes de inserir no HTML (evita quebra de layout e XSS)
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 
 class PriceAnalyzer {
@@ -29,21 +44,21 @@ class PriceAnalyzer {
     }
 
     handleFileSelect(e) {
-        console.log('handleFileSelect chamado');
+        log('handleFileSelect chamado');
         const file = e.target.files[0];
-        console.log('Arquivo selecionado:', file);
+        log('Arquivo selecionado:', file);
         if (file) {
-            console.log('Nome do arquivo:', file.name);
-            console.log('Tipo do arquivo:', file.type);
-            console.log('Tamanho do arquivo:', file.size);
+            log('Nome do arquivo:', file.name);
+            log('Tipo do arquivo:', file.type);
+            log('Tamanho do arquivo:', file.size);
             this.handleFile(file);
         } else {
-            console.log('Nenhum arquivo selecionado');
+            log('Nenhum arquivo selecionado');
         }
     }
 
     async handleFile(file) {
-        console.log('handleFile iniciado para:', file.name);
+        log('handleFile iniciado para:', file.name);
         hideUploadError();
 
         const validation = this.validateFile(file);
@@ -111,7 +126,7 @@ class PriceAnalyzer {
     }
 
     clearData(restoreUpload = true) {
-        console.log('Limpando dados anteriores...');
+        log('Limpando dados anteriores...');
         
         this.data = [];
         this.suppliers.clear();
@@ -176,7 +191,7 @@ class PriceAnalyzer {
             setupGlobalEventListeners();
         }, 100);
         
-        console.log('Dados limpos com sucesso - interface resetada');
+        log('Dados limpos com sucesso - interface resetada');
     }
 
     readExcelFile(file) {
@@ -223,7 +238,7 @@ class PriceAnalyzer {
                         throw new Error('Nenhum dado encontrado na planilha');
                     }
                     
-                    console.log('Dados filtrados:', filteredData);
+                    log('Dados filtrados:', filteredData);
                     resolve(filteredData);
                 } catch (error) {
                     console.error('Erro detalhado:', error);
@@ -237,8 +252,8 @@ class PriceAnalyzer {
     }
 
     processData(rawData) {
-        console.log('=== INÍCIO DO PROCESSAMENTO ===');
-        console.log('Dados brutos recebidos:', rawData);
+        log('=== INÍCIO DO PROCESSAMENTO ===');
+        log('Dados brutos recebidos:', rawData);
 
         if (rawData.length < 2) {
             throw new Error('Arquivo deve ter pelo menos um cabeçalho e uma linha de dados');
@@ -250,20 +265,20 @@ class PriceAnalyzer {
         // Limpar cabeçalhos
         const cleanHeaders = headers.map(header => {
             const cleaned = String(header || '').trim();
-            console.log(`Cabeçalho original: "${header}" -> Limpo: "${cleaned}"`);
+            log(`Cabeçalho original: "${header}" -> Limpo: "${cleaned}"`);
             return cleaned;
         });
 
-        console.log('Cabeçalhos limpos:', cleanHeaders);
-        console.log('Linhas de dados:', dataRows.length);
+        log('Cabeçalhos limpos:', cleanHeaders);
+        log('Linhas de dados:', dataRows.length);
 
         // Detectar coluna de produto (primeira coluna não vazia)
         const productCol = 0;
-        console.log('Coluna de produto:', productCol);
+        log('Coluna de produto:', productCol);
 
         // Detectar coluna de quantidade
         const quantityCol = this.findQuantityColumn(cleanHeaders);
-        console.log('Coluna de quantidade:', quantityCol);
+        log('Coluna de quantidade:', quantityCol);
 
         // Identificar fornecedores - CORRIGIDO
         const suppliers = [];
@@ -297,13 +312,13 @@ class PriceAnalyzer {
             
             if (!isSystemColumn) {
                 suppliers.push(header);
-                console.log(`Fornecedor detectado: "${header}" (coluna ${index})`);
+                log(`Fornecedor detectado: "${header}" (coluna ${index})`);
             } else {
-                console.log(`Coluna do sistema ignorada: "${header}" (coluna ${index})`);
+                log(`Coluna do sistema ignorada: "${header}" (coluna ${index})`);
             }
         });
 
-        console.log('Fornecedores detectados:', suppliers);
+        log('Fornecedores detectados:', suppliers);
 
         if (suppliers.length === 0) {
             throw new Error('Nenhum fornecedor encontrado nas colunas do arquivo.');
@@ -314,30 +329,35 @@ class PriceAnalyzer {
         this.suppliers = new Set(suppliers);
         this.products = new Set();
 
-        console.log('Processando linhas de dados...');
+        // Mapear a coluna de cada fornecedor UMA vez (evita busca repetida em cada linha)
+        const supplierColMap = new Map();
+        cleanHeaders.forEach((header, index) => {
+            if (index === productCol || index === quantityCol) return;
+            const name = String(header).trim();
+            if (name && suppliers.includes(name) && !supplierColMap.has(name)) {
+                supplierColMap.set(name, index);
+            }
+        });
+
+        log('Processando linhas de dados...');
         dataRows.forEach((row, rowIndex) => {
             const product = String(row[productCol] || '').trim();
             
             if (product) {
-                console.log(`\nProcessando produto: "${product}" (linha ${rowIndex + 2})`);
+                log(`\nProcessando produto: "${product}" (linha ${rowIndex + 2})`);
                 
                 suppliers.forEach((supplier) => {
-                    // Encontrar índice da coluna do fornecedor
-                    const priceColIndex = cleanHeaders.findIndex((header, index) => 
-                        index !== productCol && 
-                        index !== quantityCol && 
-                        String(header).trim() === supplier
-                    );
+                    const priceColIndex = supplierColMap.has(supplier) ? supplierColMap.get(supplier) : -1;
                     
-                    console.log(`  Fornecedor: "${supplier}" -> Coluna: ${priceColIndex}`);
+                    log(`  Fornecedor: "${supplier}" -> Coluna: ${priceColIndex}`);
                     
                     if (priceColIndex !== -1 && priceColIndex < row.length) {
                         const priceStr = String(row[priceColIndex] || '').trim();
-                        console.log(`  Valor bruto: "${priceStr}"`);
+                        log(`  Valor bruto: "${priceStr}"`);
                         
                         if (priceStr) {
                             const price = this.parsePrice(priceStr);
-                            console.log(`  Preço parseado: ${price}`);
+                            log(`  Preço parseado: ${price}`);
                             
                             if (!isNaN(price) && price > 0) {
                                 this.data.push({
@@ -350,27 +370,27 @@ class PriceAnalyzer {
                                 });
 
                                 this.products.add(product);
-                                console.log(`  ✅ Adicionado: ${product} - ${supplier} - R$ ${price}`);
+                                log(`  ✅ Adicionado: ${product} - ${supplier} - R$ ${price}`);
                             } else {
-                                console.log(`  ❌ Preço inválido: ${priceStr} -> ${price}`);
+                                log(`  ❌ Preço inválido: ${priceStr} -> ${price}`);
                             }
                         } else {
-                            console.log(`  ⚠️ Valor vazio para ${supplier}`);
+                            log(`  ⚠️ Valor vazio para ${supplier}`);
                         }
                     } else {
-                        console.log(`  ❌ Coluna não encontrada para ${supplier}`);
+                        log(`  ❌ Coluna não encontrada para ${supplier}`);
                     }
                 });
             } else {
-                console.log(`Linha ${rowIndex + 2} ignorada - produto vazio`);
+                log(`Linha ${rowIndex + 2} ignorada - produto vazio`);
             }
         });
 
-        console.log(`\n=== RESULTADO FINAL ===`);
-        console.log(`Total de itens processados: ${this.data.length}`);
-        console.log(`Produtos únicos: ${this.products.size}`);
-        console.log(`Fornecedores: ${this.suppliers.size}`);
-        console.log('Dados finais:', this.data);
+        log(`\n=== RESULTADO FINAL ===`);
+        log(`Total de itens processados: ${this.data.length}`);
+        log(`Produtos únicos: ${this.products.size}`);
+        log(`Fornecedores: ${this.suppliers.size}`);
+        log('Dados finais:', this.data);
 
         if (this.data.length === 0) {
             throw new Error('Nenhum dado válido encontrado na planilha.');
@@ -391,7 +411,7 @@ class PriceAnalyzer {
             )
         );
 
-        console.log(`Coluna de quantidade detectada: ${quantityCol}`);
+        log(`Coluna de quantidade detectada: ${quantityCol}`);
         return quantityCol !== -1 ? quantityCol : -1;
     }
 
@@ -401,7 +421,7 @@ class PriceAnalyzer {
         }
 
         let cleaned = priceStr.trim();
-        console.log(`Parseando preço: "${cleaned}"`);
+        log(`Parseando preço: "${cleaned}"`);
         
         // Remover símbolos de moeda
         cleaned = cleaned.replace(/[R$\s]/g, '');
@@ -409,13 +429,13 @@ class PriceAnalyzer {
         // Se já é um número válido
         if (!isNaN(cleaned) && !isNaN(parseFloat(cleaned))) {
             const result = parseFloat(cleaned);
-            console.log(`Resultado direto: ${result}`);
+            log(`Resultado direto: ${result}`);
             return result;
         }
         
         // Remover caracteres não numéricos exceto vírgula e ponto
         cleaned = cleaned.replace(/[^\d,.-]/g, '');
-        console.log(`Após limpeza: "${cleaned}"`);
+        log(`Após limpeza: "${cleaned}"`);
         
         // Tratar diferentes formatos de vírgula e ponto
         if (cleaned.includes(',') && cleaned.includes('.')) {
@@ -441,7 +461,7 @@ class PriceAnalyzer {
         }
         
         const result = parseFloat(cleaned);
-        console.log(`Resultado final: ${result}`);
+        log(`Resultado final: ${result}`);
         return isNaN(result) ? NaN : result;
     }
 
@@ -662,6 +682,15 @@ class PriceAnalyzer {
         
         const sortedData = this.getFilteredSortedData();
 
+        // Pré-calcular o menor preço real de cada produto (evita refiltrar os dados a cada linha)
+        const realLowestByProduct = new Map();
+        this.data.forEach(d => {
+            const current = realLowestByProduct.get(d.product);
+            if (current === undefined || d.price < current) {
+                realLowestByProduct.set(d.product, d.price);
+            }
+        });
+
         let lastProduct = '';
         sortedData.forEach((item, index) => {
             const isLowest = this.lowestPrices.has(`${item.product}-${item.supplier}`);
@@ -677,8 +706,7 @@ class PriceAnalyzer {
             const row = document.createElement('tr');
             
             // Verificar se é o menor preço real para este produto
-            const productItems = this.data.filter(d => d.product === item.product);
-            const realLowestPrice = Math.min(...productItems.map(p => p.price));
+            const realLowestPrice = realLowestByProduct.get(item.product);
             const isRealLowest = item.price === realLowestPrice;
             
             // Determinar a mensagem de status
@@ -695,12 +723,14 @@ class PriceAnalyzer {
             row.setAttribute('data-product-name', item.product.toLowerCase());
             row.setAttribute('data-supplier-name', item.supplier.toLowerCase());
             
+            const safeProduct = escapeHtml(item.product);
+            const safeSupplier = escapeHtml(item.supplier);
             row.innerHTML = `
-                <td class="product-name-cell">${item.product}</td>
-                <td class="supplier-name-cell">${item.supplier}</td>
+                <td class="product-name-cell">${safeProduct}</td>
+                <td class="supplier-name-cell">${safeSupplier}</td>
                 <td class="${isLowest ? 'lowest-price' : ''} clickable-price" 
-                    data-product="${item.product}"
-                    data-supplier="${item.supplier}"
+                    data-product="${safeProduct}"
+                    data-supplier="${safeSupplier}"
                     data-price="${item.price}"
                     style="cursor: pointer !important; position: relative !important;">
                     R$ ${item.price.toFixed(2).replace('.', ',')}
@@ -711,17 +741,17 @@ class PriceAnalyzer {
             // Adicionar event listener para o clique no preço
             const priceCell = row.querySelector('.clickable-price');
             if (priceCell) {
-                console.log('Adicionando event listener para:', item.product, item.supplier, item.price);
+                log('Adicionando event listener para:', item.product, item.supplier, item.price);
                 priceCell.addEventListener('click', function(e) {
                     e.preventDefault();
                     e.stopPropagation();
-                    console.log('CLIQUE DETECTADO!');
+                    log('CLIQUE DETECTADO!');
                     
                     const product = this.dataset.product;
                     const supplier = this.dataset.supplier;
                     const price = parseFloat(this.dataset.price);
                     
-                    console.log('Dados do clique:', product, supplier, price);
+                    log('Dados do clique:', product, supplier, price);
                     
                     // Atualizar o menor preço para este produto
                     updateSelectedPrice(product, supplier, price);
@@ -776,28 +806,25 @@ class PriceAnalyzer {
             resultado[fornecedor].sort((a, b) => a.produto.localeCompare(b.produto));
         });
         
-        console.log('Resultado da lógica textual:', resultado);
+        log('Resultado da lógica textual:', resultado);
         return resultado;
     }
 
     logDebugInfo() {
-        console.log('=== Debug Info ===');
-        console.log('Produtos:', this.products.size);
-        console.log('Fornecedores:', this.suppliers.size);
-        console.log('Total de itens:', this.data.length);
-        console.log('Menores preços:', this.lowestPrices.size);
-        console.log('Fornecedores:', Array.from(this.suppliers).join(', '));
+        log('=== Debug Info ===');
+        log('Produtos:', this.products.size);
+        log('Fornecedores:', this.suppliers.size);
+        log('Total de itens:', this.data.length);
+        log('Menores preços:', this.lowestPrices.size);
+        log('Fornecedores:', Array.from(this.suppliers).join(', '));
         const { totalSavings, percent } = this.calculatePotentialSavings();
-        console.log('Economia potencial:', totalSavings.toFixed(2), `(${percent.toFixed(1)}%)`);
+        log('Economia potencial:', totalSavings.toFixed(2), `(${percent.toFixed(1)}%)`);
     }
 }
 
 // Função para atualizar o preço selecionado
 function updateSelectedPrice(productName, selectedSupplier, selectedPrice) {
-    console.log(`Atualizando preço selecionado: ${productName} - ${selectedSupplier} - R$ ${selectedPrice.toFixed(2)}`);
-    
-    // Atualizar o mapa de menores preços
-    const oldKey = `${productName}-${window.priceAnalyzer.lowestPrices.get(`${productName}-${selectedSupplier}`) ? selectedSupplier : ''}`;
+    log(`Atualizando preço selecionado: ${productName} - ${selectedSupplier} - R$ ${selectedPrice.toFixed(2)}`);
     
     // Remover todas as entradas antigas para este produto
     for (let [key, value] of window.priceAnalyzer.lowestPrices.entries()) {
@@ -806,14 +833,14 @@ function updateSelectedPrice(productName, selectedSupplier, selectedPrice) {
         }
     }
     
-    // Adicionar o novo menor preço selecionado
+    // Adicionar o novo preço selecionado (sempre `true`, consistente com findLowestPrices)
     const newKey = `${productName}-${selectedSupplier}`;
-    window.priceAnalyzer.lowestPrices.set(newKey, selectedPrice);
+    window.priceAnalyzer.lowestPrices.set(newKey, true);
     
     window.priceAnalyzer.updateSavingsDisplay();
     applyTableFilters();
     
-    console.log(`Preço atualizado: ${productName} agora tem menor preço em ${selectedSupplier}`);
+    log(`Preço atualizado: ${productName} agora tem menor preço em ${selectedSupplier}`);
 }
 
 function getUploadAreaHTML() {
@@ -1000,7 +1027,7 @@ function openFileDialog() {
     fileInput.addEventListener('change', function(e) {
         const file = e.target.files[0];
         if (file && window.priceAnalyzer) {
-            console.log('Arquivo selecionado:', file.name);
+            log('Arquivo selecionado:', file.name);
             window.priceAnalyzer.handleFile(file);
         }
         // Remover o input temporário
@@ -1051,10 +1078,10 @@ function setupGlobalEventListeners() {
 
 // Função para alternar o menu hambúrguer
 function toggleMenu() {
-    console.log('Menu hambúrguer clicado!');
+    log('Menu hambúrguer clicado!');
     
     if (window.priceAnalyzer && window.priceAnalyzer.data.length > 0) {
-        console.log('Dados encontrados, salvando...');
+        log('Dados encontrados, salvando...');
         
         // Salvar dados diretamente
         
@@ -1072,11 +1099,11 @@ function toggleMenu() {
         // Salvar cópia original (para permitir reset na página de fornecedores)
         if (!localStorage.getItem('canaverdeDataOriginal')) {
             localStorage.setItem('canaverdeDataOriginal', JSON.stringify(dataToSave));
-            console.log('Cópia original dos dados salva');
+            log('Cópia original dos dados salva');
         }
         
-        console.log('Dados salvos no localStorage:', dataToSave);
-        console.log('Navegando para pages/suppliers.html...');
+        log('Dados salvos no localStorage:', dataToSave);
+        log('Navegando para pages/suppliers.html...');
         
         // Mostrar feedback visual
         const menuToggle = document.querySelector('.menu-toggle');
@@ -1089,14 +1116,14 @@ function toggleMenu() {
         
         // Navegar diretamente para página de fornecedores
         try {
-            console.log('Navegando para pages/suppliers.html...');
+            log('Navegando para pages/suppliers.html...');
     window.location.href = 'pages/suppliers.html';
         } catch (error) {
             console.error('Erro na navegação:', error);
             alert('Erro: Não foi possível navegar para pages/suppliers.html\n\nVerifique se o arquivo pages/suppliers.html existe no mesmo diretório.');
         }
                         } else {
-        console.log('Nenhum dado encontrado');
+        log('Nenhum dado encontrado');
         showInlineMessage('Carregue uma planilha Excel primeiro para acessar o resumo de fornecedores.');
     }
 }
@@ -1108,7 +1135,7 @@ function restoreDataFromSuppliers() {
     if (savedData && window.priceAnalyzer) {
         try {
             const data = JSON.parse(savedData);
-            console.log('Restaurando dados:', data);
+            log('Restaurando dados:', data);
             
             // Restaurar dados no priceAnalyzer
             window.priceAnalyzer.suppliers = new Set(data.suppliers);
@@ -1116,7 +1143,7 @@ function restoreDataFromSuppliers() {
             window.priceAnalyzer.data = data.data;
             window.priceAnalyzer.lowestPrices = new Map(data.lowestPrices);
             
-            console.log('Dados restaurados com sucesso');
+            log('Dados restaurados com sucesso');
             
             window.priceAnalyzer.createPriceTable();
             populateSupplierFilter();
@@ -1141,7 +1168,7 @@ function restoreDataFromSuppliers() {
             if (totalSuppliersEl) totalSuppliersEl.textContent = window.priceAnalyzer.suppliers.size;
             if (lowestPricesEl) lowestPricesEl.textContent = window.priceAnalyzer.lowestPrices.size;
             
-            console.log(`Estatísticas atualizadas: ${window.priceAnalyzer.products.size} produtos, ${window.priceAnalyzer.suppliers.size} fornecedores, ${window.priceAnalyzer.lowestPrices.size} menores preços`);
+            log(`Estatísticas atualizadas: ${window.priceAnalyzer.products.size} produtos, ${window.priceAnalyzer.suppliers.size} fornecedores, ${window.priceAnalyzer.lowestPrices.size} menores preços`);
             
             // Mostrar a seção de análise
             const analysisSection = document.getElementById('analysisSection');
@@ -1162,7 +1189,7 @@ function restoreDataFromSuppliers() {
                 `;
             }
             
-            console.log('Interface restaurada com sucesso');
+            log('Interface restaurada com sucesso');
             return true;
         } catch (error) {
             console.error('Erro ao restaurar dados:', error);
@@ -1194,9 +1221,9 @@ function hideMenuOnReload() {
 
 // Função para limpar completamente o localStorage
 function clearAllData() {
-    console.log('Limpando todos os dados do localStorage...');
+    log('Limpando todos os dados do localStorage...');
     localStorage.removeItem('canaverdeData');
-    console.log('localStorage limpo');
+    log('localStorage limpo');
 }
 
 function searchProducts() {
@@ -1214,12 +1241,16 @@ function clearSearch() {
 
 // Inicializar quando a página carregar
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('DOM carregado, inicializando...');
+    log('DOM carregado, inicializando...');
     
     // Configurar event listener para busca
     const searchInput = document.getElementById('productSearch');
     if (searchInput) {
-        searchInput.addEventListener('input', searchProducts);
+        let searchDebounce = null;
+        searchInput.addEventListener('input', () => {
+            clearTimeout(searchDebounce);
+            searchDebounce = setTimeout(searchProducts, 150);
+        });
         searchInput.addEventListener('keyup', (e) => {
             if (e.key === 'Escape') clearSearch();
         });
@@ -1232,7 +1263,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const fromSuppliers = urlParams.get('fromSuppliers');
     
     if (fromSuppliers === 'true') {
-        console.log('Voltando da página de fornecedores, restaurando dados...');
+        log('Voltando da página de fornecedores, restaurando dados...');
         // Não limpar dados, restaurar diretamente
     window.priceAnalyzer = new PriceAnalyzer();
         setupGlobalEventListeners();
@@ -1250,7 +1281,7 @@ document.addEventListener('DOMContentLoaded', () => {
         setupGlobalEventListeners();
         
         // Não restaurar dados automaticamente - deixar usuário carregar novo arquivo
-        console.log('Aguardando usuário carregar novo arquivo Excel...');
+        log('Aguardando usuário carregar novo arquivo Excel...');
         
         // Garantir que interface esteja no estado inicial
         hideMenuOnReload();

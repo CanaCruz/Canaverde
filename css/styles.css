@@ -2808,3 +2808,182 @@ body::before {
         min-width: 180px;
     }
 }
+
+/* ============================================================
+   POLIMENTO VISUAL v2.2
+   Camada de refinamento aplicada por cima dos estilos existentes.
+   ============================================================ */
+
+/* Tipografia moderna (Inter) mantendo fallback do sistema */
+body,
+button,
+input,
+select,
+textarea {
+    font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+h1, h2, h3, .stat-number, .supplier-stat-number {
+    letter-spacing: -0.02em;
+}
+
+/* Fundo: gradiente mais suave e elegante */
+body {
+    background: linear-gradient(160deg, #14310a 0%, #1f4a10 35%, #2d5e18 70%, #3c7022 100%);
+}
+
+/* Cards de estatística com hover sutil */
+.stat-card {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 12px 28px rgba(27, 61, 10, 0.25);
+}
+
+/* Tabela: cabeçalho fixo ao rolar + linhas zebradas */
+.table-wrapper {
+    max-height: 75vh;
+    overflow-y: auto;
+}
+
+.price-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+}
+
+.price-table tbody tr.product-row:nth-child(even):not(:hover) td {
+    background-color: rgba(76, 175, 80, 0.04);
+}
+
+.price-table tbody tr.product-row {
+    transition: background-color 0.15s ease;
+}
+
+.price-table tbody tr.product-row:hover td {
+    background-color: rgba(76, 175, 80, 0.10);
+}
+
+/* Preços clicáveis: feedback mais claro */
+.clickable-price {
+    transition: background-color 0.15s ease, box-shadow 0.15s ease;
+    border-radius: 6px;
+}
+
+.clickable-price:hover {
+    box-shadow: inset 0 0 0 2px rgba(46, 125, 50, 0.45);
+}
+
+/* Botões: transições e estado de foco acessível */
+.btn,
+.sort-btn,
+.copy-btn,
+.back-btn,
+.reset-btn,
+.export-btn {
+    transition: transform 0.15s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+.btn:active,
+.copy-btn:active {
+    transform: scale(0.97);
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+    outline: 3px solid rgba(139, 195, 74, 0.65);
+    outline-offset: 2px;
+}
+
+/* Cards de fornecedores: elevação suave */
+.supplier-card {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.supplier-card:hover {
+    box-shadow: 0 14px 32px rgba(27, 61, 10, 0.22);
+}
+
+.product-item {
+    transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.product-item:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* ===== Campo "Itens por embalagem" e total por produto ===== */
+.pack-size-detail {
+    align-items: center;
+}
+
+.pack-size-input {
+    width: 64px;
+    padding: 6px 8px;
+    border: 2px solid #c8e6c9;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    text-align: center;
+    background: #f7fff6;
+    color: #1b3d0a;
+    transition: border-color 0.15s ease;
+}
+
+.pack-size-input:focus {
+    border-color: #4caf50;
+}
+
+.pack-size-hint {
+    font-size: 0.78rem;
+    color: #6b8e6b;
+    margin-left: 6px;
+    white-space: nowrap;
+}
+
+.product-total-detail .product-item-total {
+    font-weight: 700;
+    color: #1b5e20;
+    background: rgba(139, 195, 74, 0.18);
+    padding: 3px 10px;
+    border-radius: 8px;
+}
+
+/* Badge de unidade detectada automaticamente */
+.unit-badge.unit-auto {
+    border-style: dashed;
+    opacity: 0.95;
+}
+
+/* Barra de rolagem refinada (WebKit) */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(27, 61, 10, 0.08);
+    border-radius: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(46, 125, 50, 0.45);
+    border-radius: 8px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(46, 125, 50, 0.65);
+}
+
+/* Mobile: respiro extra nos novos campos */
+@media (max-width: 768px) {
+    .pack-size-input {
+        width: 56px;
+    }
+
+    .table-wrapper {
+        max-height: none;
+    }
+}
