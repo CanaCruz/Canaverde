@@ -8,9 +8,134 @@ const UNIT_TYPES = [
     { id: 'ct', label: 'Cartela', short: 'ct', icon: 'fa-table-cells' }
 ];
 
+// Regras automáticas: detecta unidade pelo nome do produto
+const UNIT_AUTO_RULES = [
+    {
+        unit: 'fd',
+        keywords: [
+            'arroz', 'feijao', 'feijão', 'acucar', 'açúcar', 'sal ', 'sal grosso',
+            'papel higienico', 'papel higiênico', 'papel toalha', 'guardanapo',
+            'cafe', 'café', 'farinha', 'macarrao', 'macarrão', 'biscoito', 'bolacha',
+            'leite em po', 'leite em pó', 'flocao', 'flocão', 'fuba', 'fubá', 'milho',
+            'aveia', 'granola', 'detergente', 'sabao em po', 'sabão em pó', 'amaciante',
+            'cafe em po', 'café em pó', 'achocolatado em po', 'tempero', 'caldo',
+            'papel aluminio', 'papel alumínio', 'filme pvc', 'saco de lixo'
+        ]
+    },
+    {
+        unit: 'cx',
+        keywords: [
+            'maionese', 'ketchup', 'mostarda', 'molho', 'extrato', 'azeite', 'oleo', 'óleo',
+            'vinagre', 'refrigerante', 'refri', 'cerveja', 'agua', 'água', 'suco',
+            'leite', 'iogurte', 'manteiga', 'margarina', 'creme de leite', 'sardinha',
+            'atum', 'milho verde', 'ervilha', 'palmito', 'pickles', 'mel', 'geleia',
+            'nutella', 'nescau', 'toddy', 'catchup', 'maionnaise', 'salada', 'conserva',
+            'desinfetante', 'agua sanitaria', 'água sanitária', 'alcool', 'álcool',
+            'sabonete liquido', 'sabonete líquido', 'shampoo', 'condicionador'
+        ]
+    },
+    {
+        unit: 'dp',
+        keywords: [
+            'chocolate', 'bombom', 'balas', 'pirulito', 'chiclete', 'salgadinho',
+            'batata frita', 'doritos', 'cheetos', 'amendoim', 'castanha', 'snack',
+            'paçoca', 'pacoca', 'wafer', 'biscoito recheado', 'biscoito wafer'
+        ]
+    },
+    {
+        unit: 'dz',
+        keywords: ['ovo', 'ovos', 'long neck', 'energetico', 'energético', 'red bull']
+    },
+    {
+        unit: 'ct',
+        keywords: ['pilha', 'bateria', 'isqueiro', 'fosforo', 'fósforo', 'vela']
+    }
+];
+
+function normalizeProductKey(name) {
+    return String(name || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim();
+}
+
+function detectUnitFromProduct(productName) {
+    const normalized = normalizeProductKey(productName);
+    for (const rule of UNIT_AUTO_RULES) {
+        if (rule.keywords.some(kw => normalized.includes(normalizeProductKey(kw)))) {
+            return rule.unit;
+        }
+    }
+    return 'cx';
+}
+
+function getSavedUnitPreference(productName) {
+    const prefs = JSON.parse(localStorage.getItem('productUnitPrefs') || '{}');
+    return prefs[normalizeProductKey(productName)] || null;
+}
+
+function saveUnitPreference(productName, unit) {
+    const prefs = JSON.parse(localStorage.getItem('productUnitPrefs') || '{}');
+    prefs[normalizeProductKey(productName)] = unit;
+    localStorage.setItem('productUnitPrefs', JSON.stringify(prefs));
+}
+
+function getSavedQuantity(productName) {
+    const history = JSON.parse(localStorage.getItem('productQuantityHistory') || '{}');
+    return history[normalizeProductKey(productName)] || 0;
+}
+
+function saveQuantityHistory(productName, quantity) {
+    if (!productName || quantity <= 0) return;
+    const history = JSON.parse(localStorage.getItem('productQuantityHistory') || '{}');
+    history[normalizeProductKey(productName)] = quantity;
+    localStorage.setItem('productQuantityHistory', JSON.stringify(history));
+}
+
 function getProductUnit(productName, supplierName) {
     const units = JSON.parse(localStorage.getItem('productUnits') || '{}');
-    return units[`${productName}-${supplierName}`] || 'cx';
+    const legacyKey = `${productName}-${supplierName}`;
+    if (units[legacyKey]) return units[legacyKey];
+
+    const saved = getSavedUnitPreference(productName);
+    if (saved) return saved;
+
+    return detectUnitFromProduct(productName);
+}
+
+function isUnitAutoDetected(productName, supplierName) {
+    const units = JSON.parse(localStorage.getItem('productUnits') || '{}');
+    if (units[`${productName}-${supplierName}`]) return false;
+    if (getSavedUnitPreference(productName)) return false;
+    return true;
+}
+
+function applyProductMemory(data) {
+    if (!data || !data.data) return data;
+
+    const lowestKeys = new Set(
+        (data.lowestPrices || []).map(entry => (Array.isArray(entry) ? entry[0] : entry))
+    );
+    let changed = false;
+
+    data.data.forEach(item => {
+        const key = `${item.product}-${item.supplier}`;
+        if (!lowestKeys.has(key)) return;
+
+        if (!item.quantity || item.quantity === 0) {
+            const savedQty = getSavedQuantity(item.product);
+            if (savedQty > 0) {
+                item.quantity = savedQty;
+                changed = true;
+            }
+        }
+    });
+
+    if (changed) {
+        localStorage.setItem('canaverdeData', JSON.stringify(data));
+    }
+    return data;
 }
 
 function formatCurrency(value) {
@@ -57,6 +182,8 @@ function refreshSupplierUI(data, scrollState) {
 }
 
 function changeUnit(productName, supplierName, newUnit) {
+    saveUnitPreference(productName, newUnit);
+
     const units = JSON.parse(localStorage.getItem('productUnits') || '{}');
     units[`${productName}-${supplierName}`] = newUnit;
     localStorage.setItem('productUnits', JSON.stringify(units));
@@ -132,6 +259,8 @@ function loadSuppliersData() {
         console.log(`Fornecedores: ${data.suppliers ? data.suppliers.length : 0}`);
         console.log(`Produtos: ${data.products ? data.products.length : 0}`);
         console.log(`Menores preços: ${data.lowestPrices ? data.lowestPrices.length : 0}`);
+
+        applyProductMemory(data);
         
         // Atualizar estatísticas
         updateStats(data);
@@ -249,9 +378,12 @@ function createSupplierCards(data) {
         
         const productsHtml = products.map((product, index) => {
             console.log(`Renderizando produto ${index + 1}/${products.length}: ${product.product}`);
-            const quantity = product.quantity || 0;
-            const totalPrice = product.price * quantity;
+            const savedQty = getSavedQuantity(product.product);
+            const quantity = product.quantity > 0 ? product.quantity : savedQty;
+            const isFromHistory = (!product.quantity || product.quantity === 0) && savedQty > 0;
             const currentUnit = getProductUnit(product.product, product.supplier);
+            const unitAuto = isUnitAutoDetected(product.product, product.supplier);
+            const unitTypeInfo = UNIT_TYPES.find(u => u.id === currentUnit);
             const unitOptionsHtml = generateUnitOptions(product.product, product.supplier, currentUnit);
             
             console.log(`Produto: ${product.product}, Qtd: ${quantity}`);
@@ -291,17 +423,18 @@ function createSupplierCards(data) {
                         <div class="product-detail">
                             <span class="product-detail-label">Quantidade:</span>
                             <input type="number" 
-                                   class="quantity-input-supplier" 
+                                   class="quantity-input-supplier${isFromHistory ? ' quantity-from-history' : ''}" 
                                    value="${quantity > 0 ? quantity : ''}" 
                                    min="0" 
                                    step="1"
                                    placeholder="0"
+                                   title="${isFromHistory ? 'Quantidade da última compra' : ''}"
                                    data-product="${product.product}"
                                    data-supplier="${product.supplier}"
                                    data-unit-price="${product.price}"
                                    oninput="updateSupplierQuantity(this)"
                                    onchange="updateSupplierQuantity(this)">
-                            <span class="unit-badge" title="Altere nos 3 pontinhos">${currentUnit}</span>
+                            <span class="unit-badge${unitAuto ? ' unit-auto' : ''}" title="${unitAuto ? `Detectado: ${unitTypeInfo ? unitTypeInfo.label : currentUnit}` : (unitTypeInfo ? unitTypeInfo.label : currentUnit)}">${currentUnit}</span>
                         </div>
                         <div class="product-detail">
                             <span class="product-detail-label">Preço Unit.:</span>
@@ -424,6 +557,10 @@ function saveUpdatedData() {
             
             if (dataItem) {
                 dataItem.quantity = quantity;
+            }
+
+            if (quantity > 0) {
+                saveQuantityHistory(product, quantity);
             }
         });
         
@@ -698,6 +835,9 @@ function updateProductSupplier(data, productName, oldSupplier, newSupplier, newP
             units[newUnitKey] = units[oldUnitKey];
             delete units[oldUnitKey];
             localStorage.setItem('productUnits', JSON.stringify(units));
+            saveUnitPreference(productName, units[newUnitKey]);
+        } else {
+            saveUnitPreference(productName, getProductUnit(productName, newSupplier));
         }
         
         // Salvar dados atualizados

@@ -125,6 +125,7 @@ class PriceAnalyzer {
         localStorage.removeItem('removedProducts');
         localStorage.removeItem('finishedSuppliers');
         localStorage.removeItem('productUnits');
+        // Mantém productUnitPrefs e productQuantityHistory (memória entre planilhas)
         
         // Ocultar menu hambúrguer
         const menuToggle = document.querySelector('.menu-toggle');
@@ -501,7 +502,7 @@ class PriceAnalyzer {
                     <div class="error-box-content">
                         <strong>${title}</strong>
                         <p>${message}</p>
-                        <p class="error-box-hint">Baixe o modelo de planilha acima se precisar de referência do formato correto.</p>
+                        <p class="error-box-hint">Use coluna "Produto" na 1ª coluna e colunas de fornecedores com preços nas demais.</p>
                     </div>
                 </div>
             `;
@@ -952,19 +953,6 @@ function exportAnalysisResults() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Resultados');
     XLSX.writeFile(wb, 'Resultados_Canaverde.xlsx');
-}
-
-function downloadTemplateSpreadsheet() {
-    const rows = [
-        ['Produto', 'Quantidade', 'Fornecedor A', 'Fornecedor B', 'Fornecedor C'],
-        ['Arroz Tipo 1 5kg', 10, 22.50, 23.90, 21.80],
-        ['Feijão Carioca 1kg', 20, 8.40, 7.95, 8.20],
-        ['Óleo de Soja 900ml', 15, 6.99, 7.49, 6.75]
-    ];
-    const ws = XLSX.utils.aoa_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Modelo');
-    XLSX.writeFile(wb, 'Modelo_Canaverde.xlsx');
 }
 
 function showInlineMessage(text) {

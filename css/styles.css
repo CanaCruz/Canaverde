@@ -265,12 +265,6 @@ body::before {
     box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
 }
 
-.upload-actions {
-    display: flex;
-    justify-content: center;
-    margin-bottom: 16px;
-}
-
 .upload-hint {
     font-size: 0.9rem;
     color: #666;
@@ -443,17 +437,6 @@ body::before {
 .btn:hover {
     transform: translateY(-2px);
     box-shadow: 0 8px 20px rgba(46, 125, 50, 0.35);
-}
-
-.btn-outline {
-    background: transparent;
-    border: 2px solid rgba(255, 255, 255, 0.8);
-    color: white;
-}
-
-.btn-outline:hover {
-    background: rgba(255, 255, 255, 0.15);
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
 }
 
 .btn-secondary {
@@ -1198,12 +1181,6 @@ body::before {
 
     .upload-area {
         padding: 30px 16px;
-    }
-
-    .upload-actions .btn-outline {
-        width: 100%;
-        justify-content: center;
-        font-size: 0.9rem;
     }
 
     .analysis-section {
@@ -2784,6 +2761,22 @@ body::before {
     cursor: default;
     white-space: nowrap;
     min-width: 32px;
+}
+
+.unit-badge.unit-auto {
+    background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+    color: #1565c0;
+    border-color: rgba(21, 101, 192, 0.25);
+}
+
+.quantity-input-supplier.quantity-from-history {
+    background: #fffde7;
+    border-color: #ffc107;
+}
+
+.quantity-input-supplier.quantity-from-history:focus {
+    background: #fff9c4;
+    border-color: #ffb300;
 }
 
 /* Responsive adjustments for comparison modal */
