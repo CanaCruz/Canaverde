@@ -11,34 +11,59 @@ function getProductUnit(productName, supplierName) {
     return units[`${productName}-${supplierName}`] || 'cx';
 }
 
+function formatCurrency(value) {
+    return `R$ ${(value || 0).toFixed(2).replace('.', ',')}`;
+}
+
+function getTimeGreeting() {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Bom dia';
+    if (hour < 18) return 'Boa tarde';
+    return 'Boa noite';
+}
+
+function captureScrollState(supplierName) {
+    const supplierCard = Array.from(document.querySelectorAll('.supplier-card'))
+        .find(card => card.dataset.supplier === supplierName);
+    const productsList = supplierCard ? supplierCard.querySelector('.products-list') : null;
+    return {
+        pageScrollY: window.scrollY,
+        supplierName,
+        supplierScrollTop: productsList ? productsList.scrollTop : 0
+    };
+}
+
+function restoreScrollState(scrollState) {
+    if (!scrollState) return;
+    requestAnimationFrame(() => {
+        window.scrollTo(0, scrollState.pageScrollY);
+        if (scrollState.supplierName) {
+            const supplierCard = Array.from(document.querySelectorAll('.supplier-card'))
+                .find(card => card.dataset.supplier === scrollState.supplierName);
+            const productsList = supplierCard ? supplierCard.querySelector('.products-list') : null;
+            if (productsList) {
+                productsList.scrollTop = scrollState.supplierScrollTop;
+            }
+        }
+    });
+}
+
+function refreshSupplierUI(data, scrollState) {
+    createSupplierCards(data);
+    updateStats(data);
+    restoreScrollState(scrollState);
+}
+
 function changeUnit(productName, supplierName, newUnit) {
     const units = JSON.parse(localStorage.getItem('productUnits') || '{}');
     units[`${productName}-${supplierName}`] = newUnit;
     localStorage.setItem('productUnits', JSON.stringify(units));
 
-    // Preservar posição de rolagem da página e da lista do fornecedor
-    const pageScrollY = window.scrollY;
-    const currentSupplierCard = Array.from(document.querySelectorAll('.supplier-card'))
-        .find(card => card.dataset.supplier === supplierName);
-    const currentProductsList = currentSupplierCard ? currentSupplierCard.querySelector('.products-list') : null;
-    const supplierScrollTop = currentProductsList ? currentProductsList.scrollTop : 0;
-
+    const scrollState = captureScrollState(supplierName);
     const savedData = localStorage.getItem('canaverdeData');
     if (savedData) {
         const data = JSON.parse(savedData);
-        createSupplierCards(data);
-        updateStats(data);
-
-        // Restaurar rolagem após renderização
-        requestAnimationFrame(() => {
-            window.scrollTo(0, pageScrollY);
-            const newSupplierCard = Array.from(document.querySelectorAll('.supplier-card'))
-                .find(card => card.dataset.supplier === supplierName);
-            const newProductsList = newSupplierCard ? newSupplierCard.querySelector('.products-list') : null;
-            if (newProductsList) {
-                newProductsList.scrollTop = supplierScrollTop;
-            }
-        });
+        refreshSupplierUI(data, scrollState);
     }
 
     const unitType = UNIT_TYPES.find(u => u.id === newUnit);
@@ -272,6 +297,7 @@ function createSupplierCards(data) {
                                    data-product="${product.product}"
                                    data-supplier="${product.supplier}"
                                    data-unit-price="${product.price}"
+                                   oninput="updateSupplierQuantity(this)"
                                    onchange="updateSupplierQuantity(this)">
                             <span class="unit-badge" title="Altere nos 3 pontinhos">${currentUnit}</span>
                         </div>
@@ -303,6 +329,10 @@ function createSupplierCards(data) {
                             <div class="supplier-stat-number">${products.length}</div>
                             <div class="supplier-stat-label">Menores Preços</div>
                         </div>
+                        <div class="supplier-stat supplier-total-stat">
+                            <div class="supplier-stat-number supplier-total-value">R$ 0,00</div>
+                            <div class="supplier-stat-label">Total</div>
+                        </div>
                     </div>
                 </div>
                 <div class="products-list">
@@ -328,7 +358,7 @@ function createSupplierCards(data) {
     // Restaurar estado dos checkboxes
     restoreCheckboxStates();
     
-    // Atualizar estatísticas após criar os cards
+    // Atualizar totais após criar os cards
     updateSupplierStats();
 }
 
@@ -340,18 +370,35 @@ function updateSupplierQuantity(input) {
     
     console.log(`Atualizando quantidade: ${product} - ${supplier} - Qtd: ${quantity}`);
     
-    // Atualizar estatísticas do fornecedor
     updateSupplierStats();
-    
-    // Salvar dados atualizados no localStorage
     saveUpdatedData();
 }
 
-// Função para atualizar estatísticas do fornecedor
+// Função para calcular totais por fornecedor e total geral
 function updateSupplierStats() {
-    // Função simplificada - não precisa mais calcular valor total
-    // As estatísticas são atualizadas automaticamente na criação dos cards
-    console.log('Estatísticas dos fornecedores atualizadas');
+    let grandTotal = 0;
+
+    document.querySelectorAll('.supplier-card').forEach(card => {
+        let supplierTotal = 0;
+
+        card.querySelectorAll('.quantity-input-supplier').forEach(input => {
+            const quantity = parseInt(input.value) || 0;
+            const unitPrice = parseFloat(input.dataset.unitPrice) || 0;
+            supplierTotal += quantity * unitPrice;
+        });
+
+        grandTotal += supplierTotal;
+
+        const totalEl = card.querySelector('.supplier-total-value');
+        if (totalEl) {
+            totalEl.textContent = formatCurrency(supplierTotal);
+        }
+    });
+
+    const grandTotalEl = document.getElementById('grandTotalPage');
+    if (grandTotalEl) {
+        grandTotalEl.textContent = formatCurrency(grandTotal);
+    }
 }
 
 // Função para salvar dados atualizados
@@ -712,7 +759,7 @@ function copySupplierText(supplierName) {
     }
     
     // Adicionar mensagem final
-    whatsappText += `\nBoa Tarde\n\nSegue pedido Canaverde`;
+    whatsappText += `\n${getTimeGreeting()}\n\nSegue pedido Canaverde`;
     
     // Copiar para área de transferência
     navigator.clipboard.writeText(whatsappText).then(() => {
@@ -1041,11 +1088,8 @@ function removeProduct(productName, supplierName) {
         // Salvar dados atualizados
         localStorage.setItem('canaverdeData', JSON.stringify(data));
         
-        // Recriar interface
-        createSupplierCards(data);
-        updateStats(data);
-        
-        // Atualizar seção de produtos removidos
+        const scrollState = captureScrollState(supplierName);
+        refreshSupplierUI(data, scrollState);
         updateRemovedProductsSection();
         
         // Mostrar notificação
@@ -1165,11 +1209,8 @@ function restoreProduct(productName, supplierName) {
         // Salvar dados atualizados
         localStorage.setItem('canaverdeData', JSON.stringify(data));
         
-        // Recriar interface
-        createSupplierCards(data);
-        updateStats(data);
-        
-        // Atualizar seção de produtos removidos
+        const scrollState = captureScrollState(supplierName);
+        refreshSupplierUI(data, scrollState);
         updateRemovedProductsSection();
         
         // Mostrar notificação
@@ -1578,7 +1619,7 @@ async function exportHighlightedExcel() {
                     cell.font = { size: 9, name: 'Arial' };
                     
                     if (cell.value && typeof cell.value === 'number') {
-                        cell.numFmt = 'R$ #,##0.00';
+                        cell.numFmt = '#,##0.00';
                     }
                     
                     cell.alignment = {
