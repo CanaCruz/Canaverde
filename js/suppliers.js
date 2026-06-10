@@ -3,7 +3,9 @@ const UNIT_TYPES = [
     { id: 'cx', label: 'Caixa', short: 'cx', icon: 'fa-box' },
     { id: 'fd', label: 'Fardo', short: 'fd', icon: 'fa-boxes' },
     { id: 'dp', label: 'Display', short: 'dp', icon: 'fa-th' },
-    { id: 'un', label: 'Unidade', short: 'un', icon: 'fa-cube' }
+    { id: 'un', label: 'Unidade', short: 'un', icon: 'fa-cube' },
+    { id: 'dz', label: 'Dúzia', short: 'dz', icon: 'fa-layer-group' },
+    { id: 'ct', label: 'Cartela', short: 'ct', icon: 'fa-table-cells' }
 ];
 
 function getProductUnit(productName, supplierName) {
@@ -1549,6 +1551,12 @@ async function exportHighlightedExcel() {
         
         // Repetir cabeçalho em todas as páginas ao imprimir
         worksheet.pageSetup.printTitlesRow = '1:1';
+
+        // Numeração de páginas no rodapé ao imprimir
+        worksheet.headerFooter = {
+            oddFooter: '&CMercado Canaverde — Página &P de &N',
+            evenFooter: '&CMercado Canaverde — Página &P de &N'
+        };
         
         // Definir cabeçalhos
         const headers = ['Produto', ...suppliers];

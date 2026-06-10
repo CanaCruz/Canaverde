@@ -8,8 +8,8 @@
     <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
-    <div class="container">
-        <div class="header">
+    <div class="container" role="main" aria-label="Sistema de análise de preços Mercado Canaverde">
+        <header class="header" role="banner" aria-label="Cabeçalho do sistema">
             <div class="header-content">
                 <div class="header-text">
                     <div class="logo-container">
@@ -21,30 +21,46 @@
                             <div class="subtitle">Sistema de Análise de Preços</div>
                         </div>
                     </div>
-                    <h2><i class="fas fa-chart-line"></i> Análise de Preços</h2>
+                    <h2><i class="fas fa-chart-line" aria-hidden="true"></i> Análise de Preços</h2>
                     <p>Compare preços e encontre os melhores fornecedores</p>
                 </div>
-                <button class="menu-toggle" onclick="toggleMenu()"></button>
+                <button class="menu-toggle" onclick="toggleMenu()" aria-label="Ir para página de fornecedores"></button>
             </div>
-        </div>
+        </header>
 
-        <div class="upload-section">
-            <div class="upload-area" id="uploadArea">
-                <div class="upload-icon">
+        <section class="upload-section" role="region" aria-label="Upload de planilha">
+            <div class="upload-actions">
+                <button type="button" class="btn btn-outline" id="downloadTemplateBtn" onclick="downloadTemplateSpreadsheet()">
+                    <i class="fas fa-download" aria-hidden="true"></i> Baixar modelo de planilha
+                </button>
+            </div>
+            <div class="upload-area"
+                 id="uploadArea"
+                 role="button"
+                 tabindex="0"
+                 aria-label="Área de upload. Arraste um arquivo Excel ou pressione Enter para selecionar">
+                <div class="upload-icon" aria-hidden="true">
                     <i class="fas fa-cloud-upload-alt"></i>
                 </div>
                 <div class="upload-text">
                     Arraste e solte seu arquivo Excel aqui ou clique para selecionar
                 </div>
-                <input type="file" id="fileInput" class="file-input" accept=".xlsx,.xls" />
-                <button class="btn" onclick="openFileDialog()">
-                    <i class="fas fa-file-excel"></i> Selecionar Arquivo Excel
+                <p class="upload-hint">Formatos aceitos: .xlsx e .xls (máx. 10 MB)</p>
+                <input type="file" id="fileInput" class="file-input" accept=".xlsx,.xls" aria-hidden="true" />
+                <button type="button" class="btn" onclick="openFileDialog()">
+                    <i class="fas fa-file-excel" aria-hidden="true"></i> Selecionar Arquivo Excel
                 </button>
             </div>
-        </div>
+            <div id="uploadError" class="upload-error" role="alert" aria-live="assertive" style="display: none;"></div>
+        </section>
 
-        <div class="analysis-section" id="analysisSection">
-            <div class="stats-grid">
+        <section class="analysis-section" id="analysisSection" role="region" aria-label="Resultados da análise" style="display: none;">
+            <div id="successBanner" class="success-banner" role="status" aria-live="polite" style="display: none;">
+                <i class="fas fa-check-circle" aria-hidden="true"></i>
+                <span id="successBannerText">Análise concluída com sucesso!</span>
+            </div>
+
+            <div class="stats-grid" role="group" aria-label="Métricas da análise">
                 <div class="stat-card">
                     <div class="stat-number" id="totalProducts">0</div>
                     <div class="stat-label">Produtos</div>
@@ -57,18 +73,44 @@
                     <div class="stat-number" id="lowestPrices">0</div>
                     <div class="stat-label">Menores Preços</div>
                 </div>
+                <div class="stat-card stat-card-savings">
+                    <div class="stat-number" id="potentialSavings">R$ 0,00</div>
+                    <div class="stat-label">Economia Potencial</div>
+                    <div class="stat-sublabel" id="potentialSavingsPercent">0% vs média</div>
+                </div>
             </div>
 
-            <div class="search-section">
+            <div class="filters-toolbar" role="search" aria-label="Filtros e ordenação">
                 <div class="search-container">
-                    <i class="fas fa-search search-icon"></i>
-                    <input type="text" 
-                           id="productSearch" 
-                           class="search-input" 
-                           placeholder="Buscar produto por nome..." 
-                           autocomplete="off">
-                    <button class="search-clear" id="searchClear" onclick="clearSearch()" style="display: none;">
+                    <i class="fas fa-search search-icon" aria-hidden="true"></i>
+                    <input type="text"
+                           id="productSearch"
+                           class="search-input"
+                           placeholder="Buscar produto por nome..."
+                           autocomplete="off"
+                           aria-label="Buscar produto por nome">
+                    <button type="button" class="search-clear" id="searchClear" onclick="clearSearch()" style="display: none;" aria-label="Limpar busca">
                         <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="filter-row">
+                    <label class="filter-label" for="supplierFilter">Fornecedor:</label>
+                    <select id="supplierFilter" class="filter-select" aria-label="Filtrar por fornecedor" onchange="applyTableFilters()">
+                        <option value="">Todos os fornecedores</option>
+                    </select>
+                    <div class="sort-buttons" role="group" aria-label="Ordenar resultados">
+                        <button type="button" class="sort-btn active" data-sort="name" onclick="setSortMode('name')">
+                            <i class="fas fa-sort-alpha-down" aria-hidden="true"></i> Nome
+                        </button>
+                        <button type="button" class="sort-btn" data-sort="price-asc" onclick="setSortMode('price-asc')">
+                            <i class="fas fa-sort-amount-down" aria-hidden="true"></i> Menor preço
+                        </button>
+                        <button type="button" class="sort-btn" data-sort="price-desc" onclick="setSortMode('price-desc')">
+                            <i class="fas fa-sort-amount-up" aria-hidden="true"></i> Maior preço
+                        </button>
+                    </div>
+                    <button type="button" class="btn btn-export" onclick="exportAnalysisResults()">
+                        <i class="fas fa-file-export" aria-hidden="true"></i> Exportar resultados
                     </button>
                 </div>
                 <div class="search-results-info" id="searchResultsInfo" style="display: none;">
@@ -76,18 +118,13 @@
                 </div>
             </div>
 
-            <div class="table-wrapper">
+            <div class="table-wrapper" role="region" aria-label="Tabela de preços" tabindex="0">
                 <table id="priceTable" class="price-table">
                     <thead id="tableHead"></thead>
                     <tbody id="tableBody"></tbody>
                 </table>
             </div>
-
-            <div class="debug-info" id="debugInfo" style="display: none;">
-                <strong>Debug Info:</strong>
-                <div id="debugContent"></div>
-            </div>
-        </div>
+        </section>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>

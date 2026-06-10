@@ -1,42 +1,12 @@
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+
 class PriceAnalyzer {
     constructor() {
         this.data = [];
         this.suppliers = new Set();
         this.products = new Set();
-        this.lowestPrices = new Map(); // Mudar para Map para consistência
-        this.setupEventListeners();
-    }
-
-    setupEventListeners() {
-        console.log('Configurando event listeners...');
-        
-        const uploadArea = document.getElementById('uploadArea');
-        const fileInput = document.getElementById('fileInput');
-
-        if (uploadArea && fileInput) {
-            console.log('Elementos encontrados, adicionando listeners...');
-            
-            // Clique na área de upload
-            uploadArea.addEventListener('click', (e) => {
-                console.log('Upload area clicada');
-                e.preventDefault();
-                fileInput.click();
-        });
-
-        // Drag and drop
-            uploadArea.addEventListener('dragover', this.handleDragOver.bind(this));
-            uploadArea.addEventListener('dragleave', this.handleDragLeave.bind(this));
-            uploadArea.addEventListener('drop', this.handleDrop.bind(this));
-            
-            // Mudança no input de arquivo
-            fileInput.addEventListener('change', this.handleFileSelect.bind(this));
-            
-            console.log('Event listeners configurados com sucesso');
-        } else {
-            console.error('Elementos uploadArea ou fileInput não encontrados');
-            console.log('uploadArea:', uploadArea);
-            console.log('fileInput:', fileInput);
-        }
+        this.lowestPrices = new Map();
+        this.sortMode = 'name';
     }
 
     handleDragOver(e) {
@@ -74,44 +44,80 @@ class PriceAnalyzer {
 
     async handleFile(file) {
         console.log('handleFile iniciado para:', file.name);
-        
-        if (!this.isValidExcelFile(file)) {
-            console.log('Arquivo inválido:', file.type);
-            this.showError('Por favor, selecione um arquivo Excel válido (.xlsx ou .xls)');
+        hideUploadError();
+
+        const validation = this.validateFile(file);
+        if (!validation.valid) {
+            this.showError(validation.title, validation.message);
             return;
         }
 
-        console.log('Arquivo válido, iniciando processamento...');
-        
-        // Limpar dados anteriores
-        this.clearData();
-        
-            this.showLoading();
+        this.clearData(false);
+        this.showLoading();
 
         try {
-            console.log('Lendo arquivo Excel...');
             const rawData = await this.readExcelFile(file);
-            console.log('Dados brutos do Excel:', rawData);
-            
-            console.log('Processando dados...');
             this.processData(rawData);
-            
-            console.log('Mostrando análise...');
             this.showAnalysis();
         } catch (error) {
             console.error('Erro ao processar arquivo:', error);
-            this.showError(`Erro ao processar arquivo: ${error.message}`);
+            const msg = this.getProcessErrorMessage(error.message);
+            this.showError(msg.title, msg.message);
         }
     }
 
-    clearData() {
+    validateFile(file) {
+        if (!file) {
+            return { valid: false, title: 'Nenhum arquivo selecionado', message: 'Selecione um arquivo .xlsx ou .xls para continuar.' };
+        }
+        const fileName = file.name.toLowerCase();
+        const validExtensions = ['.xlsx', '.xls'];
+        const hasValidExt = validExtensions.some(ext => fileName.endsWith(ext));
+        if (!hasValidExt) {
+            return {
+                valid: false,
+                title: 'Formato não suportado',
+                message: 'Use apenas arquivos Excel (.xlsx ou .xls). Outros formatos não são aceitos.'
+            };
+        }
+        if (file.size > MAX_FILE_SIZE) {
+            return {
+                valid: false,
+                title: 'Arquivo muito grande',
+                message: `O arquivo tem ${(file.size / 1024 / 1024).toFixed(1)} MB. O limite máximo é 10 MB.`
+            };
+        }
+        return { valid: true };
+    }
+
+    getProcessErrorMessage(rawMessage) {
+        const msg = rawMessage || '';
+        if (msg.includes('cabeçalho') || msg.includes('Nenhum fornecedor')) {
+            return {
+                title: 'Planilha com estrutura inválida',
+                message: 'A planilha precisa ter: coluna "Produto" na 1ª coluna, opcionalmente "Quantidade" na 2ª, e colunas de fornecedores com preços nas demais colunas.'
+            };
+        }
+        if (msg.includes('Nenhum dado válido')) {
+            return {
+                title: 'Nenhum preço encontrado',
+                message: 'Verifique se os produtos têm nomes preenchidos e se os preços dos fornecedores estão em formato numérico (ex: 4,50 ou 4.50).'
+            };
+        }
+        return {
+            title: 'Erro ao processar planilha',
+            message: msg
+        };
+    }
+
+    clearData(restoreUpload = true) {
         console.log('Limpando dados anteriores...');
         
-        // Limpar dados do priceAnalyzer
         this.data = [];
         this.suppliers.clear();
         this.products.clear();
         this.lowestPrices.clear();
+        this.sortMode = 'name';
         
         // Limpar localStorage
         localStorage.removeItem('canaverdeData');
@@ -132,23 +138,21 @@ class PriceAnalyzer {
             analysisSection.style.display = 'none';
         }
         
-        // Mostrar área de upload
-        const uploadArea = document.getElementById('uploadArea');
-        if (uploadArea) {
-            uploadArea.style.display = 'block';
-            // Restaurar conteúdo original da área de upload
-            uploadArea.innerHTML = `
-                <div class="upload-icon">
-                    <i class="fas fa-cloud-upload-alt"></i>
-                </div>
-                <div class="upload-text">
-                    Arraste e solte seu arquivo Excel aqui ou clique para selecionar
-                </div>
-                <input type="file" id="fileInput" class="file-input" accept=".xlsx,.xls" />
-                <button class="btn" onclick="openFileDialog()">
-                    <i class="fas fa-file-excel"></i> Selecionar Arquivo Excel
-                </button>
-            `;
+        const successBanner = document.getElementById('successBanner');
+        if (successBanner) successBanner.style.display = 'none';
+
+        const savingsEl = document.getElementById('potentialSavings');
+        const savingsPct = document.getElementById('potentialSavingsPercent');
+        if (savingsEl) savingsEl.textContent = 'R$ 0,00';
+        if (savingsPct) savingsPct.textContent = '0% vs média';
+
+        if (restoreUpload) {
+            restoreUploadArea();
+            document.querySelectorAll('.sort-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.sort === 'name');
+            });
+            const supplierFilter = document.getElementById('supplierFilter');
+            if (supplierFilter) supplierFilter.value = '';
         }
         
         // Limpar tabela
@@ -172,28 +176,6 @@ class PriceAnalyzer {
         }, 100);
         
         console.log('Dados limpos com sucesso - interface resetada');
-    }
-
-    isValidExcelFile(file) {
-        console.log('Verificando arquivo:', file.name, 'Tipo:', file.type);
-        
-        const validTypes = [
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'application/vnd.ms-excel',
-            'application/excel',
-            'application/x-excel',
-            'application/x-msexcel'
-        ];
-        
-        const validExtensions = ['.xlsx', '.xls'];
-        const fileName = file.name.toLowerCase();
-        
-        const isValidType = validTypes.includes(file.type);
-        const isValidExtension = validExtensions.some(ext => fileName.endsWith(ext));
-        
-        console.log('Tipo válido:', isValidType, 'Extensão válida:', isValidExtension);
-        
-        return isValidType || isValidExtension;
     }
 
     readExcelFile(file) {
@@ -492,97 +474,167 @@ class PriceAnalyzer {
     showLoading() {
         const uploadArea = document.getElementById('uploadArea');
         const analysisSection = document.getElementById('analysisSection');
-        
+        hideUploadError();
+
         if (uploadArea) {
             uploadArea.innerHTML = `
-                <div class="upload-icon">
-                    <i class="fas fa-spinner fa-spin"></i>
+                <div class="loading-state" role="status" aria-live="polite" aria-label="Processando arquivo">
+                    <div class="css-spinner" aria-hidden="true"></div>
+                    <div class="upload-text">Processando arquivo...</div>
+                    <p class="upload-hint">Aguarde enquanto analisamos os preços</p>
                 </div>
-                <div class="upload-text">Processando arquivo...</div>
             `;
         }
-        
-        if (analysisSection) {
-            analysisSection.style.display = 'none';
-        }
+
+        if (analysisSection) analysisSection.style.display = 'none';
     }
 
-    showError(message) {
-        const uploadArea = document.getElementById('uploadArea');
+    showError(title, message) {
+        restoreUploadArea();
+        const errorBox = document.getElementById('uploadError');
         const analysisSection = document.getElementById('analysisSection');
-        
-        if (uploadArea) {
-            uploadArea.innerHTML = `
-                <div class="upload-icon">
-                    <i class="fas fa-exclamation-triangle"></i>
+
+        if (errorBox) {
+            errorBox.innerHTML = `
+                <div class="error-box">
+                    <div class="error-box-icon"><i class="fas fa-exclamation-circle" aria-hidden="true"></i></div>
+                    <div class="error-box-content">
+                        <strong>${title}</strong>
+                        <p>${message}</p>
+                        <p class="error-box-hint">Baixe o modelo de planilha acima se precisar de referência do formato correto.</p>
+                    </div>
                 </div>
-                <div class="upload-text" style="color: #e74c3c;">${message}</div>
-                <button class="btn" onclick="location.reload()">
-                    <i class="fas fa-redo"></i> Tentar Novamente
-                </button>
             `;
+            errorBox.style.display = 'block';
         }
-        
-        if (analysisSection) {
-            analysisSection.style.display = 'none';
-        }
+
+        if (analysisSection) analysisSection.style.display = 'none';
     }
 
     showAnalysis() {
         const uploadArea = document.getElementById('uploadArea');
         const analysisSection = document.getElementById('analysisSection');
-        
+        const successBanner = document.getElementById('successBanner');
+        const successText = document.getElementById('successBannerText');
+
         if (uploadArea) {
             uploadArea.innerHTML = `
-                <div class="upload-icon">
-                    <i class="fas fa-check-circle"></i>
+                <div class="upload-success-mini" role="status">
+                    <i class="fas fa-check-circle" aria-hidden="true"></i>
+                    <span>Arquivo carregado: <strong>${this.products.size}</strong> produtos, <strong>${this.suppliers.size}</strong> fornecedores</span>
                 </div>
-                <div class="upload-text" style="color: #27ae60;">Arquivo processado com sucesso!</div>
-                <button class="btn" onclick="location.reload()">
-                    <i class="fas fa-upload"></i> Carregar Outro Arquivo
+                <button type="button" class="btn btn-secondary" onclick="reloadForNewFile()">
+                    <i class="fas fa-upload" aria-hidden="true"></i> Carregar outro arquivo
                 </button>
             `;
         }
-        
-        if (analysisSection) {
-        analysisSection.style.display = 'block';
-        }
 
-        // Mostrar menu hambúrguer após carregar Excel
+        if (analysisSection) analysisSection.style.display = 'block';
+
         const menuToggle = document.querySelector('.menu-toggle');
-        if (menuToggle) {
-            menuToggle.classList.add('visible');
-        }
-        
-        // Atualizar estatísticas
-        const totalProductsEl = document.getElementById('totalProducts');
-        const totalSuppliersEl = document.getElementById('totalSuppliers');
-        const lowestPricesEl = document.getElementById('lowestPrices');
-        
-        if (totalProductsEl) totalProductsEl.textContent = this.products.size;
-        if (totalSuppliersEl) totalSuppliersEl.textContent = this.suppliers.size;
-        if (lowestPricesEl) lowestPricesEl.textContent = this.lowestPrices.size;
+        if (menuToggle) menuToggle.classList.add('visible');
 
-        // Criar tabela
+        document.getElementById('totalProducts').textContent = this.products.size;
+        document.getElementById('totalSuppliers').textContent = this.suppliers.size;
+        document.getElementById('lowestPrices').textContent = this.lowestPrices.size;
+
+        this.updateSavingsDisplay();
+        populateSupplierFilter();
         this.createPriceTable();
-        
-        // Limpar busca se houver
+        this.logDebugInfo();
+
+        if (successBanner && successText) {
+            successText.textContent = `Análise concluída! ${this.products.size} produtos comparados entre ${this.suppliers.size} fornecedores.`;
+            successBanner.style.display = 'flex';
+        }
+
         const searchInput = document.getElementById('productSearch');
         if (searchInput) {
             searchInput.value = '';
-            const searchClear = document.getElementById('searchClear');
-            if (searchClear) searchClear.style.display = 'none';
-            const searchResultsInfo = document.getElementById('searchResultsInfo');
-            if (searchResultsInfo) searchResultsInfo.style.display = 'none';
+            document.getElementById('searchClear').style.display = 'none';
+            document.getElementById('searchResultsInfo').style.display = 'none';
         }
-        
-        // Mostrar debug info
-        this.showDebugInfo();
+        const supplierFilter = document.getElementById('supplierFilter');
+        if (supplierFilter) supplierFilter.value = '';
 
-        // Scroll para a seção de análise
-        analysisSection.scrollIntoView({ 
-            behavior: 'smooth' 
+        analysisSection.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    calculatePotentialSavings() {
+        let totalSavings = 0;
+        let totalAverage = 0;
+
+        this.products.forEach(product => {
+            const items = this.data.filter(d => d.product === product);
+            if (items.length === 0) return;
+            const prices = items.map(i => i.price);
+            const minPrice = Math.min(...prices);
+            const avgPrice = prices.reduce((a, b) => a + b, 0) / prices.length;
+            totalSavings += Math.max(0, avgPrice - minPrice);
+            totalAverage += avgPrice;
         });
+
+        const percent = totalAverage > 0 ? (totalSavings / totalAverage) * 100 : 0;
+        return { totalSavings, percent };
+    }
+
+    updateSavingsDisplay() {
+        const { totalSavings, percent } = this.calculatePotentialSavings();
+        const savingsEl = document.getElementById('potentialSavings');
+        const pctEl = document.getElementById('potentialSavingsPercent');
+        if (savingsEl) {
+            savingsEl.textContent = `R$ ${totalSavings.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        }
+        if (pctEl) pctEl.textContent = `${percent.toFixed(1)}% vs média`;
+    }
+
+    getProductSummary() {
+        const summaries = [];
+        this.products.forEach(product => {
+            const items = this.data.filter(d => d.product === product);
+            const prices = items.map(i => i.price);
+            const minPrice = Math.min(...prices);
+            const maxPrice = Math.max(...prices);
+            const winner = items.find(i => i.price === minPrice);
+            const diffPercent = maxPrice > 0 ? ((maxPrice - minPrice) / maxPrice) * 100 : 0;
+            summaries.push({
+                product,
+                winner: winner ? winner.supplier : '',
+                minPrice,
+                maxPrice,
+                diffPercent,
+                items
+            });
+        });
+        return summaries;
+    }
+
+    getFilteredSortedData() {
+        let data = [...this.data];
+        const searchTerm = (document.getElementById('productSearch')?.value || '').toLowerCase().trim();
+        const supplierFilter = document.getElementById('supplierFilter')?.value || '';
+
+        if (searchTerm) {
+            data = data.filter(item =>
+                item.product.toLowerCase().includes(searchTerm) ||
+                item.supplier.toLowerCase().includes(searchTerm)
+            );
+        }
+        if (supplierFilter) {
+            data = data.filter(item => item.supplier === supplierFilter);
+        }
+
+        if (this.sortMode === 'price-asc') {
+            data.sort((a, b) => a.price - b.price || a.product.localeCompare(b.product));
+        } else if (this.sortMode === 'price-desc') {
+            data.sort((a, b) => b.price - a.price || a.product.localeCompare(b.product));
+        } else {
+            data.sort((a, b) => {
+                if (a.product !== b.product) return a.product.localeCompare(b.product);
+                return a.price - b.price;
+            });
+        }
+        return data;
     }
 
     createPriceTable() {
@@ -607,13 +659,7 @@ class PriceAnalyzer {
         // Corpo da tabela
         tableBody.innerHTML = '';
         
-        // Ordenar por produto e depois por preço
-        const sortedData = [...this.data].sort((a, b) => {
-            if (a.product !== b.product) {
-                return a.product.localeCompare(b.product);
-            }
-            return a.price - b.price;
-        });
+        const sortedData = this.getFilteredSortedData();
 
         let lastProduct = '';
         sortedData.forEach((item, index) => {
@@ -733,20 +779,15 @@ class PriceAnalyzer {
         return resultado;
     }
 
-    showDebugInfo() {
-        const debugInfo = document.getElementById('debugInfo');
-        const debugContent = document.getElementById('debugContent');
-        
-        if (debugInfo && debugContent) {
-            debugInfo.style.display = 'block';
-            debugContent.innerHTML = `
-                <div><strong>Produtos encontrados:</strong> ${this.products.size}</div>
-                <div><strong>Fornecedores encontrados:</strong> ${this.suppliers.size}</div>
-                <div><strong>Total de itens:</strong> ${this.data.length}</div>
-                <div><strong>Menores preços:</strong> ${this.lowestPrices.size}</div>
-                <div><strong>Fornecedores:</strong> ${Array.from(this.suppliers).join(', ')}</div>
-            `;
-        }
+    logDebugInfo() {
+        console.log('=== Debug Info ===');
+        console.log('Produtos:', this.products.size);
+        console.log('Fornecedores:', this.suppliers.size);
+        console.log('Total de itens:', this.data.length);
+        console.log('Menores preços:', this.lowestPrices.size);
+        console.log('Fornecedores:', Array.from(this.suppliers).join(', '));
+        const { totalSavings, percent } = this.calculatePotentialSavings();
+        console.log('Economia potencial:', totalSavings.toFixed(2), `(${percent.toFixed(1)}%)`);
     }
 }
 
@@ -768,10 +809,192 @@ function updateSelectedPrice(productName, selectedSupplier, selectedPrice) {
     const newKey = `${productName}-${selectedSupplier}`;
     window.priceAnalyzer.lowestPrices.set(newKey, selectedPrice);
     
-    // Recriar a tabela para atualizar os destaques
-    window.priceAnalyzer.createPriceTable();
+    window.priceAnalyzer.updateSavingsDisplay();
+    applyTableFilters();
     
     console.log(`Preço atualizado: ${productName} agora tem menor preço em ${selectedSupplier}`);
+}
+
+function getUploadAreaHTML() {
+    return `
+        <div class="upload-icon" aria-hidden="true">
+            <i class="fas fa-cloud-upload-alt"></i>
+        </div>
+        <div class="upload-text">
+            Arraste e solte seu arquivo Excel aqui ou clique para selecionar
+        </div>
+        <p class="upload-hint">Formatos aceitos: .xlsx e .xls (máx. 10 MB)</p>
+        <input type="file" id="fileInput" class="file-input" accept=".xlsx,.xls" aria-hidden="true" />
+        <button type="button" class="btn" onclick="openFileDialog()">
+            <i class="fas fa-file-excel" aria-hidden="true"></i> Selecionar Arquivo Excel
+        </button>
+    `;
+}
+
+function restoreUploadArea() {
+    const uploadArea = document.getElementById('uploadArea');
+    if (!uploadArea) return;
+    uploadArea.style.display = 'block';
+    uploadArea.innerHTML = getUploadAreaHTML();
+    uploadArea.setAttribute('role', 'button');
+    uploadArea.setAttribute('tabindex', '0');
+    uploadArea.setAttribute('aria-label', 'Área de upload. Arraste um arquivo Excel ou pressione Enter para selecionar');
+    setupGlobalEventListeners();
+    setupUploadKeyboard();
+}
+
+function hideUploadError() {
+    const errorBox = document.getElementById('uploadError');
+    if (errorBox) {
+        errorBox.style.display = 'none';
+        errorBox.innerHTML = '';
+    }
+}
+
+function setupUploadKeyboard() {
+    const uploadArea = document.getElementById('uploadArea');
+    if (!uploadArea || uploadArea.dataset.keyboardBound === 'true') return;
+
+    uploadArea.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            const fileInput = document.getElementById('fileInput');
+            if (fileInput) fileInput.click();
+        }
+    });
+    uploadArea.dataset.keyboardBound = 'true';
+}
+
+function reloadForNewFile() {
+    if (window.priceAnalyzer) {
+        window.priceAnalyzer.clearData(true);
+    }
+    hideUploadError();
+    hideMenuOnReload();
+}
+
+function populateSupplierFilter() {
+    const select = document.getElementById('supplierFilter');
+    if (!select || !window.priceAnalyzer) return;
+
+    const current = select.value;
+    select.innerHTML = '<option value="">Todos os fornecedores</option>';
+    Array.from(window.priceAnalyzer.suppliers).sort().forEach(supplier => {
+        const opt = document.createElement('option');
+        opt.value = supplier;
+        opt.textContent = supplier;
+        select.appendChild(opt);
+    });
+    if (current && Array.from(window.priceAnalyzer.suppliers).includes(current)) {
+        select.value = current;
+    }
+}
+
+function setSortMode(mode) {
+    if (!window.priceAnalyzer) return;
+    window.priceAnalyzer.sortMode = mode;
+    document.querySelectorAll('.sort-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.sort === mode);
+    });
+    applyTableFilters();
+}
+
+function applyTableFilters() {
+    if (!window.priceAnalyzer) return;
+    window.priceAnalyzer.createPriceTable();
+
+    const searchInput = document.getElementById('productSearch');
+    const searchClear = document.getElementById('searchClear');
+    const searchResultsInfo = document.getElementById('searchResultsInfo');
+    const searchResultsText = document.getElementById('searchResultsText');
+
+    if (!searchInput) return;
+
+    const searchTerm = searchInput.value.toLowerCase().trim();
+    const supplierFilter = document.getElementById('supplierFilter')?.value || '';
+    const totalCount = window.priceAnalyzer.data.length;
+
+    if (searchClear) searchClear.style.display = searchTerm ? 'flex' : 'none';
+
+    const filtered = window.priceAnalyzer.getFilteredSortedData();
+    if (searchResultsInfo && searchResultsText) {
+        if (searchTerm || supplierFilter) {
+            searchResultsText.textContent = `${filtered.length} resultado(s) de ${totalCount} total`;
+            searchResultsInfo.style.display = 'block';
+        } else {
+            searchResultsInfo.style.display = 'none';
+        }
+    }
+}
+
+function exportAnalysisResults() {
+    if (!window.priceAnalyzer || window.priceAnalyzer.data.length === 0) {
+        showInlineMessage('Nenhum dado para exportar. Carregue uma planilha primeiro.');
+        return;
+    }
+
+    const summaries = window.priceAnalyzer.getProductSummary()
+        .sort((a, b) => a.product.localeCompare(b.product));
+
+    const rows = [
+        ['Produto', 'Fornecedor Vencedor', 'Menor Preço']
+    ];
+
+    summaries.forEach(s => {
+        rows.push([
+            s.product,
+            s.winner,
+            s.minPrice
+        ]);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Resultados');
+    XLSX.writeFile(wb, 'Resultados_Canaverde.xlsx');
+}
+
+function downloadTemplateSpreadsheet() {
+    const rows = [
+        ['Produto', 'Quantidade', 'Fornecedor A', 'Fornecedor B', 'Fornecedor C'],
+        ['Arroz Tipo 1 5kg', 10, 22.50, 23.90, 21.80],
+        ['Feijão Carioca 1kg', 20, 8.40, 7.95, 8.20],
+        ['Óleo de Soja 900ml', 15, 6.99, 7.49, 6.75]
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Modelo');
+    XLSX.writeFile(wb, 'Modelo_Canaverde.xlsx');
+}
+
+function showInlineMessage(text) {
+    const analysisSection = document.getElementById('analysisSection');
+    const analysisVisible = analysisSection && analysisSection.style.display !== 'none';
+
+    if (analysisVisible) {
+        const banner = document.getElementById('successBanner');
+        const bannerText = document.getElementById('successBannerText');
+        if (banner && bannerText) {
+            bannerText.textContent = text;
+            banner.style.display = 'flex';
+            banner.classList.add('warning');
+            setTimeout(() => banner.classList.remove('warning'), 4000);
+        }
+        return;
+    }
+
+    const errorBox = document.getElementById('uploadError');
+    if (errorBox) {
+        errorBox.innerHTML = `
+            <div class="error-box warning-box">
+                <div class="error-box-icon"><i class="fas fa-info-circle" aria-hidden="true"></i></div>
+                <div class="error-box-content">
+                    <p>${text}</p>
+                </div>
+            </div>
+        `;
+        errorBox.style.display = 'block';
+    }
 }
 
 // Função global para abrir o diálogo de arquivo
@@ -800,35 +1023,42 @@ function openFileDialog() {
     fileInput.click();
 }
 
-// Função global para configurar event listeners
 function setupGlobalEventListeners() {
-    console.log('Configurando event listeners globais...');
-    
     const uploadArea = document.getElementById('uploadArea');
-    const fileInput = document.getElementById('fileInput');
+    if (!uploadArea || uploadArea.dataset.globalBound === 'true') return;
 
-    if (uploadArea && fileInput) {
-        console.log('Elementos encontrados, configurando listeners...');
-        
-        // Clique na área de upload
-        uploadArea.addEventListener('click', (e) => {
-            console.log('Upload area clicada');
-            e.preventDefault();
-            fileInput.click();
-        });
-        
-        // Mudança no input de arquivo
-        fileInput.addEventListener('change', (e) => {
-            console.log('Arquivo selecionado via input');
-            if (window.priceAnalyzer) {
-                window.priceAnalyzer.handleFileSelect(e);
-            }
-        });
-        
-        console.log('Event listeners globais configurados');
-        } else {
-        console.error('Elementos não encontrados para configuração global');
-    }
+    uploadArea.addEventListener('click', (e) => {
+        if (e.target.closest('button')) return;
+        const fileInput = document.getElementById('fileInput');
+        if (fileInput) fileInput.click();
+    });
+
+    uploadArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        uploadArea.classList.add('dragover');
+    });
+
+    uploadArea.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        uploadArea.classList.remove('dragover');
+    });
+
+    uploadArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadArea.classList.remove('dragover');
+        const files = e.dataTransfer.files;
+        if (files.length > 0 && window.priceAnalyzer) {
+            window.priceAnalyzer.handleFile(files[0]);
+        }
+    });
+
+    uploadArea.addEventListener('change', (e) => {
+        if (e.target.id === 'fileInput' && window.priceAnalyzer) {
+            window.priceAnalyzer.handleFileSelect(e);
+        }
+    });
+
+    uploadArea.dataset.globalBound = 'true';
 }
 
 // Função para alternar o menu hambúrguer
@@ -879,7 +1109,7 @@ function toggleMenu() {
         }
                         } else {
         console.log('Nenhum dado encontrado');
-        alert('Por favor, carregue uma planilha Excel primeiro para acessar o resumo de fornecedores.');
+        showInlineMessage('Carregue uma planilha Excel primeiro para acessar o resumo de fornecedores.');
     }
 }
 
@@ -900,8 +1130,13 @@ function restoreDataFromSuppliers() {
             
             console.log('Dados restaurados com sucesso');
             
-            // Recriar a tabela com os dados atualizados
             window.priceAnalyzer.createPriceTable();
+            populateSupplierFilter();
+            window.priceAnalyzer.updateSavingsDisplay();
+            window.priceAnalyzer.logDebugInfo();
+
+            const successBanner = document.getElementById('successBanner');
+            if (successBanner) successBanner.style.display = 'flex';
             
             // Mostrar o menu hambúrguer novamente
             const menuToggle = document.querySelector('.menu-toggle');
@@ -926,10 +1161,17 @@ function restoreDataFromSuppliers() {
                 analysisSection.style.display = 'block';
             }
             
-            // Ocultar a área de upload apenas se há dados válidos
             const uploadArea = document.getElementById('uploadArea');
             if (uploadArea && window.priceAnalyzer.data.length > 0) {
-                uploadArea.style.display = 'none';
+                uploadArea.innerHTML = `
+                    <div class="upload-success-mini" role="status">
+                        <i class="fas fa-check-circle" aria-hidden="true"></i>
+                        <span>Arquivo carregado: <strong>${window.priceAnalyzer.products.size}</strong> produtos, <strong>${window.priceAnalyzer.suppliers.size}</strong> fornecedores</span>
+                    </div>
+                    <button type="button" class="btn btn-secondary" onclick="reloadForNewFile()">
+                        <i class="fas fa-upload" aria-hidden="true"></i> Carregar outro arquivo
+                    </button>
+                `;
             }
             
             console.log('Interface restaurada com sucesso');
@@ -969,124 +1211,15 @@ function clearAllData() {
     console.log('localStorage limpo');
 }
 
-// Função para buscar produtos na tabela
 function searchProducts() {
-    const searchInput = document.getElementById('productSearch');
-    const searchClear = document.getElementById('searchClear');
-    const searchResultsInfo = document.getElementById('searchResultsInfo');
-    const searchResultsText = document.getElementById('searchResultsText');
-    
-    if (!searchInput) return;
-    
-    const searchTerm = searchInput.value.toLowerCase().trim();
-    const tableBody = document.getElementById('tableBody');
-    
-    if (!tableBody) return;
-    
-    // Mostrar/ocultar botão de limpar
-    if (searchTerm.length > 0) {
-        searchClear.style.display = 'flex';
-    } else {
-        searchClear.style.display = 'none';
-        searchResultsInfo.style.display = 'none';
-    }
-    
-    // Buscar todas as linhas de produto (ignorar separadores)
-    const rows = tableBody.querySelectorAll('tr.product-row');
-    let visibleCount = 0;
-    let totalCount = rows.length;
-    
-    if (searchTerm.length === 0) {
-        // Mostrar todas as linhas
-        rows.forEach(row => {
-            row.style.display = '';
-        });
-        
-        // Mostrar separadores baseado nas linhas visíveis
-        updateSeparators();
-        searchResultsInfo.style.display = 'none';
-    } else {
-        // Filtrar linhas
-        rows.forEach(row => {
-            const productName = row.getAttribute('data-product-name') || '';
-            const supplierName = row.getAttribute('data-supplier-name') || '';
-            
-            if (productName.includes(searchTerm) || supplierName.includes(searchTerm)) {
-                row.style.display = '';
-                visibleCount++;
-            } else {
-                row.style.display = 'none';
-            }
-        });
-        
-        // Atualizar separadores
-        updateSeparators();
-        
-        // Mostrar informações de resultados
-        if (visibleCount > 0) {
-            searchResultsText.textContent = `${visibleCount} produto(s) encontrado(s) de ${totalCount} total`;
-            searchResultsInfo.style.display = 'block';
-        } else {
-            searchResultsText.textContent = 'Nenhum produto encontrado';
-            searchResultsInfo.style.display = 'block';
-        }
-    }
+    applyTableFilters();
 }
 
-// Função para atualizar separadores baseado nas linhas visíveis
-function updateSeparators() {
-    const tableBody = document.getElementById('tableBody');
-    if (!tableBody) return;
-    
-    const rows = tableBody.querySelectorAll('tr');
-    let lastVisibleProduct = '';
-    
-    rows.forEach((row, index) => {
-        if (row.classList.contains('product-separator')) {
-            // Verificar se há produtos visíveis antes e depois do separador
-            let hasVisibleBefore = false;
-            let hasVisibleAfter = false;
-            
-            // Verificar antes
-            for (let i = index - 1; i >= 0; i--) {
-                if (rows[i].classList.contains('product-row')) {
-                    if (rows[i].style.display !== 'none') {
-                        hasVisibleBefore = true;
-                        break;
-                    }
-                } else if (rows[i].classList.contains('product-separator')) {
-                    break;
-                }
-            }
-            
-            // Verificar depois
-            for (let i = index + 1; i < rows.length; i++) {
-                if (rows[i].classList.contains('product-row')) {
-                    if (rows[i].style.display !== 'none') {
-                        hasVisibleAfter = true;
-                        break;
-                    }
-                } else if (rows[i].classList.contains('product-separator')) {
-                    break;
-                }
-            }
-            
-            // Mostrar separador apenas se houver produtos visíveis antes e depois
-            if (hasVisibleBefore && hasVisibleAfter) {
-                row.style.display = '';
-            } else {
-                row.style.display = 'none';
-            }
-        }
-    });
-}
-
-// Função para limpar busca
 function clearSearch() {
     const searchInput = document.getElementById('productSearch');
     if (searchInput) {
         searchInput.value = '';
-        searchProducts();
+        applyTableFilters();
         searchInput.focus();
     }
 }
@@ -1100,11 +1233,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (searchInput) {
         searchInput.addEventListener('input', searchProducts);
         searchInput.addEventListener('keyup', (e) => {
-            if (e.key === 'Escape') {
-                clearSearch();
-            }
+            if (e.key === 'Escape') clearSearch();
         });
     }
+
+    setupUploadKeyboard();
     
     // Verificar se estamos voltando da página de fornecedores
     const urlParams = new URLSearchParams(window.location.search);
