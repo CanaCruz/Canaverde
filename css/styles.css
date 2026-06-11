@@ -2987,3 +2987,78 @@ select:focus-visible {
         max-height: none;
     }
 }
+
+/* =====================================================
+   POLIMENTO VISUAL v2.3
+   ===================================================== */
+
+/* Ícones nos cards de estatísticas */
+.stat-icon {
+    width: 44px;
+    height: 44px;
+    margin: 0 auto 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.18);
+    font-size: 1.2rem;
+}
+
+/* Status da tabela de preços como badges */
+.success,
+.selected {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+
+.success {
+    color: #1b5e20;
+    background: rgba(76, 175, 80, 0.15);
+}
+
+.selected {
+    color: #4527a0;
+    background: rgba(102, 126, 234, 0.15);
+}
+
+/* Faixa de destaque no topo dos cards de fornecedor */
+.supplier-card {
+    position: relative;
+    overflow: hidden;
+}
+
+.supplier-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 5px;
+    background: linear-gradient(90deg, #2e7d32 0%, #4caf50 50%, #8bc34a 100%);
+}
+
+/* Cor padrão dos números de estatística do fornecedor (destaques continuam roxos) */
+.supplier-stat-number {
+    color: #2e7d32;
+}
+
+/* Campo de quantidade: borda neutra com foco em verde */
+.quantity-input-supplier {
+    border: 2px solid #e0e0e0;
+}
+
+.quantity-input-supplier:focus {
+    border-color: #4caf50;
+    box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.15);
+}
+
+/* Hover do "fornecedor finalizado" alinhado à paleta verde */
+.supplier-finished:hover {
+    border-color: #4caf50;
+}
