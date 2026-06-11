@@ -1,191 +1,158 @@
-# 🏪 Mercado Canaverde - Sistema de Análise de Preços
+# Mercado Canaverde — Sistema de Análise de Preços
 
-Sistema inteligente para análise e comparação de preços de fornecedores através de planilhas Excel. Interface moderna com funcionalidades avançadas de seleção de preços, drag and drop, e navegação intuitiva.
+Ferramenta web para comparar preços de fornecedores a partir de planilhas Excel. Desenvolvida para o **Mercado Canaverde**, com interface moderna, página de cotação por fornecedor e exportação para impressão/WhatsApp.
 
-## 📁 Estrutura do Projeto
+**Demo:** [canacruz.github.io/Canaverde](https://canacruz.github.io/Canaverde/)
+
+---
+
+## Início rápido
+
+### Online (GitHub Pages)
+Acesse o link acima, carregue sua planilha `.xlsx` ou `.xls` e use normalmente.
+
+### Local
+```bash
+git clone https://github.com/CanaCruz/Canaverde.git
+cd Canaverde
+npx http-server -p 8081 -c-1 -o
+```
+
+Abra `http://127.0.0.1:8081` no navegador.
+
+---
+
+## Formato da planilha
+
+| Produto | Quantidade | Fornecedor A | Fornecedor B | Fornecedor C |
+|---------|------------|--------------|--------------|--------------|
+| Arroz 5kg | | 22,50 | 23,90 | 21,80 |
+| Feijão 1kg | | 8,40 | 7,95 | 8,20 |
+
+- **1ª coluna:** nome do produto (obrigatório)
+- **Quantidade:** coluna opcional (ignorada na importação; quantidades são definidas na página de fornecedores)
+- **Demais colunas:** um fornecedor por coluna, com preços numéricos
+
+**Limites:** apenas `.xlsx` e `.xls`, máximo **10 MB**.
+
+---
+
+## Fluxo de uso
+
+1. **Página principal** — importe a planilha e veja a comparação de preços
+2. Clique em um preço para selecionar outro fornecedor como vencedor
+3. Use **Fornecedores** (menu superior) para montar o pedido
+4. Na página de fornecedores: informe quantidades, ajuste unidades e exporte a cotação
+
+---
+
+## Funcionalidades
+
+### Página principal (`index.html`)
+- Upload com drag-and-drop e validação de arquivo
+- Spinner de carregamento e mensagens de erro/sucesso no HTML
+- Métricas: produtos, fornecedores, menores preços e **economia potencial**
+- Busca em tempo real, filtro por fornecedor e ordenação (nome / menor / maior preço)
+- Exportação de resultados em `.xlsx` (SheetJS)
+- Tabela responsiva com scroll horizontal em telas pequenas
+- Acessibilidade: `role`, `aria-label`, suporte a teclado na área de upload
+
+### Página de fornecedores (`pages/suppliers.html`)
+- Cards por fornecedor com produtos de menor preço selecionados
+- **Quantidade** editável com memória da última compra (fundo amarelo = valor lembrado)
+- **Unidade automática** por nome do produto (cx, fd, dp, un, dz, ct) — badge azul = detectado; alterações manuais são memorizadas
+- **Itens por embalagem** — total = `quantidade × itens por embalagem × preço unitário`
+- Total por produto, total por fornecedor e total geral do pedido
+- Drag and drop entre fornecedores
+- Comparar preços, remover/restaurar produtos
+- Copiar lista para WhatsApp (com saudação por horário)
+- Exportar planilha Excel com destaques amarelos, formatação A4 e numeração de páginas na impressão
+- Resetar ao estado original da planilha
+
+---
+
+## Estrutura do projeto
 
 ```
 Canaverde/
 ├── index.html              # Página principal
-├── css/                    # Pasta de estilos CSS
-│   └── styles.css          # Estilos principais
-├── js/                     # Pasta de arquivos JavaScript
-│   ├── script.js           # Script principal
-│   └── suppliers.js        # Script da página de fornecedores
-├── pages/                  # Pasta de páginas adicionais
-│   └── suppliers.html      # Página de resumo por fornecedor
-├── assets/                 # Pasta para recursos (imagens, ícones, etc.)
-├── config.json             # Arquivo de configuração do projeto
-└── README.md               # Este arquivo
+├── pages/
+│   └── suppliers.html      # Página de fornecedores
+├── js/
+│   ├── script.js           # Análise, upload, filtros, exportação
+│   └── suppliers.js        # Fornecedores, totais, WhatsApp, Excel
+├── css/
+│   └── styles.css
+├── assets/
+│   └── logo.png
+└── README.md
 ```
 
-## 🚀 Como Usar
+---
 
-1. **Abra `index.html`** no navegador
-2. **Carregue sua planilha Excel** (.xlsx ou .xls)
-3. **Visualize a análise** com separação visual entre produtos
-4. **Clique nos preços** para selecionar fornecedores alternativos
-5. **Use o menu hamburger** (3 barras) para acessar a página de fornecedores
-6. **Arraste produtos** entre fornecedores na página de fornecedores
-7. **Edite quantidades** diretamente na página de fornecedores
+## Tecnologias
 
-## 📊 Formato da Planilha
+| Uso | Biblioteca |
+|-----|------------|
+| Leitura Excel (principal) | [SheetJS / XLSX.js](https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/) |
+| Exportação cotação | [ExcelJS](https://github.com/exceljs/exceljs) |
+| Ícones | Font Awesome 6 |
+| Fonte | Inter (Google Fonts) |
+| Persistência | `localStorage` |
 
-A planilha deve ter o seguinte formato:
+---
 
-| Produto | Quantidade | Fornecedor A | Fornecedor B | Vila Nova | ... |
-|---------|------------|--------------|--------------|-----------|-----|
-| Arroz   | 0          | 4.50         | 4.80         | 4.20      | ... |
-| Feijão  | 0          | 3.20         | 3.50         | 3.10      | ... |
+## Versão atual — 2.2
 
-### Colunas:
-- **Primeira coluna**: Nome do produto
-- **Segunda coluna**: Quantidade (opcional, pode ser vazia)
-- **Demais colunas**: Nomes dos fornecedores com seus preços
+**Junho 2026**
 
-## ✨ Funcionalidades
+### Destaques da v2.2
+- **Itens por embalagem** no cálculo do total do pedido
+- **Unidades automáticas** refinadas (prioridade por palavra-chave mais específica)
+- **Histórico de quantidade** e preferência de unidade entre planilhas
+- Visual com fonte Inter, cabeçalho fixo na tabela, cards e acessibilidade melhorados
+- Correções de sanitização, event delegation e performance em planilhas grandes
 
-### 🎯 Análise de Preços
-- ✅ **Importação de arquivos Excel** (.xlsx, .xls)
-- ✅ **Detecção automática de fornecedores**
-- ✅ **Identificação dos menores preços**
-- ✅ **Destaque visual dos menores preços** (fundo amarelo)
-- ✅ **Preços clicáveis** para seleção alternativa
-- ✅ **Mensagens de status** diferenciadas:
-  - 💰 "Menor Preço" (verde) - Menor preço real
-  - ✅ "Preço Selecionado" (azul) - Preço escolhido pelo usuário
+### Histórico resumido
+| Versão | Principais entregas |
+|--------|---------------------|
+| 2.2 | Embalagens, visual, correções |
+| 2.1 | Filtros, economia potencial, exportação de resultados, numeração Excel |
+| 2.0 | Unidades, totais, exportação A4, busca, remoção de produtos |
+| 1.x | Drag and drop, WhatsApp, estrutura de pastas, versão inicial |
 
-### 🎨 Interface Moderna
-- ✅ **Separação visual entre produtos** (50px de espaçamento)
-- ✅ **Interface de upload limpa** e profissional
-- ✅ **Menu hamburger** (3 barras) para navegação
-- ✅ **Design responsivo** para todos os dispositivos
-- ✅ **Botões com gradiente** e efeitos hover
+---
 
-### 📊 Página de Fornecedores
-- ✅ **Resumo detalhado por fornecedor**
-- ✅ **Drag and drop** de produtos entre fornecedores
-- ✅ **Quantidades editáveis** por fornecedor
-- ✅ **Cálculo automático de totais**
-- ✅ **Atualização dinâmica** de preços e valores
-- ✅ **Navegação fluida** entre páginas
+## Convenção de commits
 
-### 🔧 Funcionalidades Técnicas
-- ✅ **Armazenamento local** para persistência de dados
-- ✅ **Navegação sem perda de dados** entre páginas
-- ✅ **Interface sem ícones desnecessários** (limpa)
-- ✅ **CSS externo** funcionando corretamente
+Este repositório usa mensagens padronizadas:
 
-## 🔧 Arquivos Principais
+```
+feat:     nova funcionalidade
+fix:      correção de bug
+docs:     documentação
+refactor: reorganização sem mudar comportamento
+revert:   desfaz commit anterior
+```
 
-### `index.html`
-- **Página principal** do sistema
-- **Upload de planilhas** com interface limpa
-- **Tabela de análise** com separação visual entre produtos
-- **Preços clicáveis** para seleção alternativa
-- **Estatísticas gerais** (produtos, fornecedores, menores preços)
-- **Menu hamburger** para navegação
-- **Mensagens de status** diferenciadas
+Exemplos: `feat: exportação Excel otimizada para A4`, `fix: preserva scroll ao trocar unidade`
 
-### `suppliers.html`
-- **Página de fornecedores** com resumo detalhado
-- **Cards de fornecedores** com produtos e preços
-- **Quantidades editáveis** por fornecedor
-- **Drag and drop** de produtos entre fornecedores
-- **Cálculo automático** de totais
-- **Navegação fluida** de volta para análise
+---
 
-### `js/script.js`
-- **Lógica principal** de processamento
-- **Leitura de arquivos Excel** (.xlsx, .xls)
-- **Análise de preços** e detecção de fornecedores
-- **Criação de tabelas** com separação visual
-- **Sistema de seleção** de preços alternativos
-- **Armazenamento local** para persistência
-- **Navegação entre páginas** sem perda de dados
+## Solução de problemas
 
-### `js/suppliers.js`
-- **Lógica da página de fornecedores**
-- **Renderização de cards** com produtos
-- **Sistema de drag and drop** entre fornecedores
-- **Edição de quantidades** e cálculo de totais
-- **Atualização dinâmica** de preços
-- **Navegação de volta** para análise principal
+| Problema | O que verificar |
+|----------|-----------------|
+| Planilha não carrega | Formato `.xlsx`/`.xls`, tamanho ≤ 10 MB, coluna Produto preenchida |
+| Fornecedor não aparece | Nome da coluna não pode ser palavra reservada (ex.: "Total", "Preço") |
+| Página em branco local | Servir via `http-server`; não abrir `index.html` direto do disco |
+| Dados sumiram | Novo upload limpa a sessão; histórico de quantidade/unidade permanece no navegador |
 
-## 🎯 Sistema Avançado
+Console do navegador (`F12`) para erros detalhados. Logs de debug: flag `DEBUG` em `suppliers.js`.
 
-Sistema completo com interface moderna, funcionalidades avançadas de seleção de preços, drag and drop, e navegação intuitiva entre páginas.
+---
 
-## 📝 Notas Técnicas
+## Licença e autor
 
-### 🛠️ Tecnologias Utilizadas
-- **XLSX.js** - Leitura de arquivos Excel (.xlsx, .xls)
-- **CSS3** - Design responsivo e moderno com gradientes
-- **JavaScript ES6+** - Classes e funcionalidades avançadas
-- **HTML5** - Estrutura semântica e acessível
-- **LocalStorage** - Persistência de dados entre páginas
-
-### 🎨 Características da Interface
-- **Separação visual** entre produtos (50px de espaçamento)
-- **Preços clicáveis** com feedback visual
-- **Menu hamburger** para navegação intuitiva
-- **Drag and drop** na página de fornecedores
-- **Interface limpa** sem ícones desnecessários
-- **Botões com gradiente** e efeitos hover profissionais
-
-### 🔄 Funcionalidades Avançadas
-- **Seleção alternativa de preços** - Clique para escolher fornecedor diferente
-- **Mensagens de status diferenciadas** - Menor preço vs Preço selecionado
-- **Quantidades editáveis** por fornecedor
-- **Cálculo automático** de totais
-- **Navegação sem perda de dados** entre páginas
-
-## 🐛 Solução de Problemas
-
-### Problemas Comuns e Soluções:
-
-**📁 Problema na leitura do Excel:**
-1. Verifique o console do navegador (F12)
-2. Confirme o formato da planilha
-3. Verifique se todos os fornecedores estão sendo detectados
-
-**🎨 Interface não carrega corretamente:**
-1. Verifique se o arquivo `styles.css` está no mesmo diretório
-2. Confirme que não há conflitos de CSS
-3. Teste em modo incógnito para evitar cache
-
-**🔄 Navegação entre páginas:**
-1. Certifique-se de que `suppliers.html` existe
-2. Verifique se os dados estão sendo salvos no localStorage
-3. Use o botão "Voltar para Análise" na página de fornecedores
-
-**💰 Preços não clicáveis:**
-1. Verifique se o JavaScript está carregado
-2. Confirme que não há erros no console
-3. Teste com diferentes navegadores
-
-## 📞 Suporte
-
-Para dúvidas ou problemas, verifique:
-- **Console do navegador** para erros (F12)
-- **Formato da planilha** conforme especificado
-- **Nomes das colunas** (evite palavras-chave do sistema)
-- **Compatibilidade do navegador** (Chrome, Firefox, Edge recomendados)
-
-## 🚀 Versão Atual
-
-**Versão:** 2.2 - Embalagens e Visual  
-**Última atualização:** Junho 2026
-
-### Novidades da v2.2
-- 📦 **Itens por embalagem**: novo campo em cada produto na página de fornecedores. O total agora é `quantidade × itens por embalagem × preço unitário`. Ex: 2 cx de um produto com 12 itens a R$ 4,50 = **R$ 108,00** (antes somava só R$ 9,00). O valor fica memorizado por produto, mesmo trocando de planilha. Se o preço da planilha já for o da embalagem fechada, deixe em 1.
-- 💰 **Total por produto** visível no card e **Total do Pedido** incluído na lista copiada para WhatsApp
-- 🏷️ **Unidades automáticas refinadas**: cartela agora é exclusiva de isqueiros e aparelhos de barba; dúzia é só manual; pilhas/baterias foram para display; e a detecção passou a priorizar a palavra-chave mais específica ("Chocolate ao Leite" → display, não caixa)
-- 🎨 **Visual**: fonte Inter, cabeçalho da tabela fixo ao rolar, linhas zebradas, hover suave nos cards, barra de rolagem estilizada, foco visível para acessibilidade
-- 🔒 **Correções reaplicadas**: sanitização de nomes com aspas/apóstrofos (sem quebrar menus/copiar/drag), event delegation no lugar de onclick inline, seleção de preço consistente entre páginas, pré-cálculo de colunas e menores preços (mais rápido em planilhas grandes), busca com debounce, logs atrás da flag `DEBUG`
-
-## 📜 Versões Anteriores
-
-**Versão:** 2.0 - Interface Moderna  
-**Última atualização:** Dezembro 2024  
-**Funcionalidades:** Análise completa com seleção de preços, drag and drop, e navegação intuitiva
+Projeto interno do **Mercado Canaverde**.  
+Repositório: [github.com/CanaCruz/Canaverde](https://github.com/CanaCruz/Canaverde)
