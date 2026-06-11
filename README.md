@@ -102,20 +102,21 @@ Canaverde/
 
 ---
 
-## Versão atual — 2.2
+## Versão atual — 2.3
 
 **Junho 2026**
 
-### Destaques da v2.2
-- **Itens por embalagem** no cálculo do total do pedido
-- **Unidades automáticas** refinadas (prioridade por palavra-chave mais específica)
-- **Histórico de quantidade** e preferência de unidade entre planilhas
-- Visual com fonte Inter, cabeçalho fixo na tabela, cards e acessibilidade melhorados
-- Correções de sanitização, event delegation e performance em planilhas grandes
+### Destaques da v2.3
+- Ícones nos cards de estatísticas (produtos, fornecedores, menores preços, totais)
+- Status da tabela de preços ("Menor Preço" / "Preço Selecionado") como badges em pílula
+- Faixa de destaque verde no topo dos cards de fornecedor
+- Cores de foco/hover do campo de quantidade alinhadas à paleta verde
+- Limpeza de regras de CSS legadas/duplicadas não utilizadas
 
 ### Histórico resumido
 | Versão | Principais entregas |
 |--------|---------------------|
+| 2.3 | Polimento visual (ícones, badges, detalhes em verde) e limpeza de CSS |
 | 2.2 | Embalagens, visual, correções |
 | 2.1 | Filtros, economia potencial, exportação de resultados, numeração Excel |
 | 2.0 | Unidades, totais, exportação A4, busca, remoção de produtos |

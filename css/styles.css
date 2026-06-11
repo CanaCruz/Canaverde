@@ -964,12 +964,6 @@ body::before {
 }
 
 /* Supplier Cards */
-.supplier-cards {
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-}
-
 .supplier-card {
     background: white;
     border-radius: 15px;
@@ -1001,54 +995,10 @@ body::before {
     border-bottom: none;
 }
 
-.product-info {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 8px;
-}
-
 .product-name {
     font-weight: 500;
     color: #555;
     flex: 1;
-}
-
-.product-quantity {
-    font-size: 0.9rem;
-    color: #888;
-    background: #f8f9fa;
-    padding: 2px 8px;
-    border-radius: 12px;
-}
-
-.product-prices {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 8px;
-}
-
-.product-price-unit {
-    font-weight: 600;
-    color: #667eea;
-    font-size: 0.9rem;
-}
-
-.product-price-total {
-    font-weight: 700;
-    color: #333;
-    font-size: 1rem;
-}
-
-.product-price-unit.lowest,
-.product-price-total.lowest {
-    background: #fff3cd;
-    color: #856404;
-    padding: 4px 8px;
-    border-radius: 8px;
-    font-weight: 700;
 }
 
 /* Footer */
@@ -1400,154 +1350,8 @@ body::before {
     gap: 20px;
 }
 
-.supplier-cards-detailed {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-    gap: 25px;
-}
-
-.supplier-card-detailed {
-    background: white;
-    border-radius: 20px;
-    padding: 25px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-    border-left: 5px solid #667eea;
-    transition: transform 0.3s ease;
-}
-
-.supplier-card-detailed:hover {
-    transform: translateY(-5px);
-}
-
-.supplier-header-detailed {
-    margin-bottom: 20px;
-    padding-bottom: 15px;
-    border-bottom: 2px solid #f0f0f0;
-}
-
-.supplier-name-detailed {
-    font-size: 1.4rem;
-    font-weight: 700;
-    color: #333;
-    margin-bottom: 15px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-
-.supplier-name-detailed i {
-    color: #667eea;
-    font-size: 1.2rem;
-}
-
-.supplier-summary-stats {
-    display: flex;
-    gap: 20px;
-    flex-wrap: wrap;
-}
-
-.supplier-stat {
-    text-align: center;
-    background: #f8f9fa;
-    padding: 12px 16px;
-    border-radius: 12px;
-    min-width: 80px;
-}
-
-.supplier-stat.total-value {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-}
-
-.supplier-stat-number {
-    display: block;
-    font-size: 1.2rem;
-    font-weight: 700;
-    margin-bottom: 4px;
-}
-
-.supplier-stat-label {
-    font-size: 0.8rem;
-    opacity: 0.8;
-}
-
-.products-container-detailed {
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-}
-
-.product-item-detailed {
-    padding: 15px 0;
-    border-bottom: 1px solid #f0f0f0;
-}
-
-.product-item-detailed:last-child {
-    border-bottom: none;
-}
-
-.product-info-detailed {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 10px;
-}
-
-.product-name-detailed {
-    font-weight: 600;
-    color: #555;
-    flex: 1;
-    font-size: 1rem;
-}
-
-.product-quantity-detailed {
-    font-size: 0.9rem;
-    color: #888;
-    background: #e9ecef;
-    padding: 4px 10px;
-    border-radius: 15px;
-    font-weight: 500;
-}
-
-.product-prices-detailed {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 10px;
-}
-
-.product-price-unit-detailed {
-    font-weight: 600;
-    color: #667eea;
-    font-size: 0.95rem;
-}
-
-.product-price-total-detailed {
-    font-weight: 700;
-    color: #333;
-    font-size: 1.1rem;
-}
-
-.product-price-unit-detailed.lowest,
-.product-price-total-detailed.lowest {
-    background: #fff3cd;
-    color: #856404;
-    padding: 6px 12px;
-    border-radius: 10px;
-    font-weight: 700;
-}
-
 /* Responsive adjustments */
 @media (max-width: 768px) {
-    .supplier-cards-detailed {
-        grid-template-columns: 1fr;
-    }
-    
-    .supplier-summary-stats {
-        justify-content: center;
-    }
-    
     .supplier-stat {
         min-width: 70px;
         padding: 10px 12px;
