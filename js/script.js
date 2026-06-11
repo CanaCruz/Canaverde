@@ -401,8 +401,8 @@ class PriceAnalyzer {
 
     findQuantityColumn(headers) {
         const quantityKeywords = [
-            'quantidade', 'qtd', 'qtde', 'quantity', 'qty', 
-            'unidade', 'unidades', 'qnt', 'quant', 'q'
+            'quantidade', 'qtd', 'qtde', 'quantity', 'qty',
+            'unidade', 'unidades', 'qnt', 'quant'
         ];
         
         const quantityCol = headers.findIndex(header => 
