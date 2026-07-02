@@ -1,7 +1,7 @@
 // ===== Utilitários globais =====
 // Modo de depuração: mude para true para ver logs detalhados no console
 const DEBUG = false;
-const log = (...args) => { if (DEBUG) log(...args); };
+const log = (...args) => { if (DEBUG) console.log(...args); };
 
 // Escapa texto vindo da planilha antes de inserir no HTML (evita quebra de layout e XSS)
 function escapeHtml(value) {
@@ -14,6 +14,39 @@ function escapeHtml(value) {
 }
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+
+// ===== Histórico de cotações =====
+// Guarda uma cópia da cotação anterior (produtos, fornecedores, preços e quantidades)
+// no Firestore (coleção "cotacoes") antes que ela seja descartada por um novo upload,
+// para consulta posterior — de qualquer computador — na página de fornecedores.
+// O timestamp da cotação vira o ID do documento: chamar isso mais de uma vez para a
+// mesma cotação apenas sobrescreve o mesmo documento (idempotente), sem duplicar.
+function archiveCurrentCotacaoIfNeeded() {
+    try {
+        const raw = localStorage.getItem('canaverdeData');
+        if (!raw) return;
+
+        const data = JSON.parse(raw);
+        const items = Array.isArray(data.data) ? data.data : [];
+        const hasQuantity = items.some(item => (item.quantity || 0) > 0);
+        if (!hasQuantity) return;
+
+        const timestamp = data.timestamp || new Date().toISOString();
+        const grandTotal = items.reduce((sum, item) => sum + (item.quantity || 0) * (item.price || 0), 0);
+
+        db.collection('cotacoes').doc(timestamp).set({
+            timestamp,
+            suppliers: data.suppliers || [],
+            products: data.products || [],
+            data: items,
+            grandTotal
+        }).catch(error => {
+            console.error('Erro ao arquivar cotação no histórico (Firestore):', error);
+        });
+    } catch (error) {
+        console.error('Erro ao arquivar cotação no histórico:', error);
+    }
+}
 
 class PriceAnalyzer {
     constructor() {
@@ -74,6 +107,8 @@ class PriceAnalyzer {
             const rawData = await this.readExcelFile(file);
             this.processData(rawData);
             this.showAnalysis();
+            const warning = this.getInvalidPricesWarning();
+            if (warning) showInlineMessage(warning);
         } catch (error) {
             console.error('Erro ao processar arquivo:', error);
             const msg = this.getProcessErrorMessage(error.message);
@@ -127,13 +162,16 @@ class PriceAnalyzer {
 
     clearData(restoreUpload = true) {
         log('Limpando dados anteriores...');
-        
+
         this.data = [];
         this.suppliers.clear();
         this.products.clear();
         this.lowestPrices.clear();
         this.sortMode = 'name';
-        
+
+        // Arquivar a cotação anterior no histórico antes de descartá-la
+        archiveCurrentCotacaoIfNeeded();
+
         // Limpar localStorage
         localStorage.removeItem('canaverdeData');
         localStorage.removeItem('canaverdeDataOriginal');
@@ -328,6 +366,7 @@ class PriceAnalyzer {
         this.data = [];
         this.suppliers = new Set(suppliers);
         this.products = new Set();
+        this.invalidPrices = new Map(); // fornecedor -> quantidade de preços não numéricos ignorados
 
         // Mapear a coluna de cada fornecedor UMA vez (evita busca repetida em cada linha)
         const supplierColMap = new Map();
@@ -373,6 +412,7 @@ class PriceAnalyzer {
                                 log(`  ✅ Adicionado: ${product} - ${supplier} - R$ ${price}`);
                             } else {
                                 log(`  ❌ Preço inválido: ${priceStr} -> ${price}`);
+                                this.invalidPrices.set(supplier, (this.invalidPrices.get(supplier) || 0) + 1);
                             }
                         } else {
                             log(`  ⚠️ Valor vazio para ${supplier}`);
@@ -397,6 +437,15 @@ class PriceAnalyzer {
         }
 
         this.findLowestPrices();
+    }
+
+    getInvalidPricesWarning() {
+        if (!this.invalidPrices || this.invalidPrices.size === 0) return null;
+        const total = Array.from(this.invalidPrices.values()).reduce((a, b) => a + b, 0);
+        const parts = Array.from(this.invalidPrices.entries())
+            .map(([supplier, count]) => `${supplier} (${count})`)
+            .join(', ');
+        return `⚠️ ${total} preço(s) inválido(s) foram ignorados: ${parts}`;
     }
 
     findQuantityColumn(headers) {
@@ -520,8 +569,8 @@ class PriceAnalyzer {
                 <div class="error-box">
                     <div class="error-box-icon"><i class="fas fa-exclamation-circle" aria-hidden="true"></i></div>
                     <div class="error-box-content">
-                        <strong>${title}</strong>
-                        <p>${message}</p>
+                        <strong>${escapeHtml(title)}</strong>
+                        <p>${escapeHtml(message)}</p>
                         <p class="error-box-hint">Use coluna "Produto" na 1ª coluna e colunas de fornecedores com preços nas demais.</p>
                     </div>
                 </div>
@@ -581,12 +630,24 @@ class PriceAnalyzer {
         analysisSection.scrollIntoView({ behavior: 'smooth' });
     }
 
+    groupDataByProduct() {
+        const groups = new Map();
+        this.data.forEach(item => {
+            if (!groups.has(item.product)) {
+                groups.set(item.product, []);
+            }
+            groups.get(item.product).push(item);
+        });
+        return groups;
+    }
+
     calculatePotentialSavings() {
         let totalSavings = 0;
         let totalAverage = 0;
+        const groups = this.groupDataByProduct();
 
         this.products.forEach(product => {
-            const items = this.data.filter(d => d.product === product);
+            const items = groups.get(product) || [];
             if (items.length === 0) return;
             const prices = items.map(i => i.price);
             const minPrice = Math.min(...prices);
@@ -611,8 +672,9 @@ class PriceAnalyzer {
 
     getProductSummary() {
         const summaries = [];
+        const groups = this.groupDataByProduct();
         this.products.forEach(product => {
-            const items = this.data.filter(d => d.product === product);
+            const items = groups.get(product) || [];
             const prices = items.map(i => i.price);
             const minPrice = Math.min(...prices);
             const maxPrice = Math.max(...prices);
@@ -1004,7 +1066,7 @@ function showInlineMessage(text) {
             <div class="error-box warning-box">
                 <div class="error-box-icon"><i class="fas fa-info-circle" aria-hidden="true"></i></div>
                 <div class="error-box-content">
-                    <p>${text}</p>
+                    <p>${escapeHtml(text)}</p>
                 </div>
             </div>
         `;
@@ -1222,7 +1284,13 @@ function hideMenuOnReload() {
 // Função para limpar completamente o localStorage
 function clearAllData() {
     log('Limpando todos os dados do localStorage...');
+    archiveCurrentCotacaoIfNeeded();
     localStorage.removeItem('canaverdeData');
+    localStorage.removeItem('canaverdeDataOriginal');
+    localStorage.removeItem('removedProducts');
+    localStorage.removeItem('finishedSuppliers');
+    localStorage.removeItem('productUnits');
+    // Mantém productUnitPrefs e productQuantityHistory (memória entre planilhas)
     log('localStorage limpo');
 }
 

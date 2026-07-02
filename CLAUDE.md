@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project overview
 
-Mercado Canaverde — a static, client-side-only web app for comparing supplier prices from Excel spreadsheets. No build step, no backend, no package.json. Pure HTML/CSS/vanilla JS loaded via `<script>` tags and CDN libraries (SheetJS/XLSX for import/export on the main page, ExcelJS for the suppliers page export).
+Mercado Canaverde — a static, client-side-only web app for comparing supplier prices from Excel spreadsheets. No build step, no custom backend, no package.json. Pure HTML/CSS/vanilla JS loaded via `<script>` tags and CDN libraries (SheetJS/XLSX for import/export on the main page, ExcelJS for the suppliers page export, Firebase compat SDK for the cloud quotation history — see below).
 
 ## Running locally
 
@@ -20,9 +20,10 @@ There is no test suite, linter, or build command.
 
 Two pages share state via `localStorage` (no server, no routing framework):
 
-- **`index.html` + `js/script.js`** — Upload & analysis page. The `PriceAnalyzer` class parses the uploaded spreadsheet (first row = headers, first column = product name, other non-system columns = suppliers with prices), computes lowest prices per product, and renders the comparison table. On "go to suppliers" (`toggleMenu()`), it serializes its state to `localStorage['canaverdeData']` and also snapshots `localStorage['canaverdeDataOriginal']` (used later for "Resetar Tudo").
-- **`pages/suppliers.html` + `js/suppliers.js`** — Fornecedores page. Reads `canaverdeData`, groups each supplier's lowest-priced products into cards, and supports quantity entry, unit selection, packaging (`itens por embalagem`), drag-and-drop between suppliers, price comparison/swap, product removal/restoration, WhatsApp text export, and Excel export (highlighted cells, A4 print formatting with page numbers).
+- **`index.html` + `js/script.js`** — Upload & analysis page. The `PriceAnalyzer` class parses the uploaded spreadsheet (first row = headers, first column = product name, other non-system columns = suppliers with prices), computes lowest prices per product, and renders the comparison table. On "go to suppliers" (`toggleMenu()`), it serializes its state to `localStorage['canaverdeData']` and also snapshots `localStorage['canaverdeDataOriginal']` (used later for "Resetar Tudo"). Before a working cotação (with quantities filled in) is discarded — new upload, or a fresh page load — `archiveCurrentCotacaoIfNeeded()` writes it to Firestore for the cloud history feature.
+- **`pages/suppliers.html` + `js/suppliers.js`** — Fornecedores page. Reads `canaverdeData`, groups each supplier's lowest-priced products into cards, and supports quantity entry, unit selection, price comparison/swap (via the "⋮" product menu), product removal/restoration, WhatsApp text export, Excel export (highlighted cells, A4 print formatting with page numbers), and browsing the cloud quotation history ("📜 Histórico" button).
 - **`css/styles.css`** — single shared stylesheet for both pages.
+- **`js/firebase-config.js`** — Firebase project config + `db` (Firestore) instance, loaded on both pages before `script.js`/`suppliers.js`. Also defines `MAX_COTACOES_HISTORICO` (20).
 
 ### localStorage keys
 
@@ -33,8 +34,16 @@ Session data (cleared on new upload):
 
 Persistent across uploads (memory features, never cleared by `clearData`):
 - `productUnitPrefs` — user-chosen unit per product (keyed by `normalizeProductKey`)
-- `productPackSizes` — "itens por embalagem" per product
 - `productQuantityHistory` — last entered quantity per product, used to pre-fill and highlight (yellow) on next upload
+
+### Cloud quotation history (Firestore)
+
+The `cotacoes` collection in the `mercado-canaverde` Firebase project stores past quotations so they're browsable from any computer, not just the one that created them. No authentication — Firestore security rules restrict read/write to just the `cotacoes` collection, open (`allow read, write: if true`), no expiry. Acceptable tradeoff given the data isn't sensitive (product/supplier names and prices, no PII/payment info); anyone with the site's public Firebase config could technically write to this collection.
+
+- Each document ID is the cotação's `timestamp` (ISO string) — writing twice for the same cotação overwrites rather than duplicates.
+- Document shape: `{ timestamp, suppliers: string[], products: string[], data: [{product, supplier, price, quantity, ...}], grandTotal }`.
+- Written by `archiveCurrentCotacaoIfNeeded()` in `script.js`, only when the outgoing cotação has at least one item with `quantity > 0`.
+- Read by `openHistoryModal()` in `suppliers.js` (`js/suppliers.js`), querying the `MAX_COTACOES_HISTORICO` (20) most recent documents ordered by `timestamp desc`. Results are cached in the module-level `historyCache` for the detail view, to avoid extra reads.
 
 ### Spreadsheet parsing rules (`script.js`)
 

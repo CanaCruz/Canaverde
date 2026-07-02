@@ -1,6 +1,6 @@
 // ===== Utilitários globais =====
 const DEBUG = false;
-const log = (...args) => { if (DEBUG) log(...args); };
+const log = (...args) => { if (DEBUG) console.log(...args); };
 
 // Escapa texto vindo da planilha antes de inserir no HTML (evita quebra de layout e XSS)
 function escapeHtml(value) {
@@ -10,6 +10,17 @@ function escapeHtml(value) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+}
+
+// Lê e parseia um valor JSON do localStorage, retornando um fallback em caso de dado corrompido
+function getStoredJSON(key, fallback) {
+    try {
+        const raw = localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : fallback;
+    } catch (error) {
+        console.error(`Erro ao ler "${key}" do localStorage:`, error);
+        return fallback;
+    }
 }
 
 // Encontra o card de um fornecedor pelo nome (seguro para nomes com aspas/caracteres especiais)
@@ -107,60 +118,30 @@ function detectUnitFromProduct(productName) {
 }
 
 function getSavedUnitPreference(productName) {
-    const prefs = JSON.parse(localStorage.getItem('productUnitPrefs') || '{}');
+    const prefs = getStoredJSON('productUnitPrefs', {});
     return prefs[normalizeProductKey(productName)] || null;
 }
 
 function saveUnitPreference(productName, unit) {
-    const prefs = JSON.parse(localStorage.getItem('productUnitPrefs') || '{}');
+    const prefs = getStoredJSON('productUnitPrefs', {});
     prefs[normalizeProductKey(productName)] = unit;
     localStorage.setItem('productUnitPrefs', JSON.stringify(prefs));
 }
 
-// ===== Itens por embalagem =====
-// Quantos itens vêm dentro de 1 caixa/fardo/display/cartela/dúzia.
-// O total passa a ser: quantidade de embalagens × itens por embalagem × preço unitário.
-// Se o preço da planilha já for o preço da embalagem fechada, basta deixar em 1.
-const DEFAULT_PACK_BY_UNIT = { cx: 1, fd: 1, dp: 1, un: 1, dz: 12, ct: 1 };
-
-function getPackSize(productName) {
-    const packs = JSON.parse(localStorage.getItem('productPackSizes') || '{}');
-    const saved = packs[normalizeProductKey(productName)];
-    if (saved && saved > 0) return saved;
-    return 0; // 0 = não definido (usa padrão da unidade)
-}
-
-function getEffectivePackSize(productName, unit) {
-    const saved = getPackSize(productName);
-    if (saved > 0) return saved;
-    return DEFAULT_PACK_BY_UNIT[unit] || 1;
-}
-
-function savePackSize(productName, packSize) {
-    const packs = JSON.parse(localStorage.getItem('productPackSizes') || '{}');
-    const key = normalizeProductKey(productName);
-    if (packSize > 0) {
-        packs[key] = packSize;
-    } else {
-        delete packs[key];
-    }
-    localStorage.setItem('productPackSizes', JSON.stringify(packs));
-}
-
 function getSavedQuantity(productName) {
-    const history = JSON.parse(localStorage.getItem('productQuantityHistory') || '{}');
+    const history = getStoredJSON('productQuantityHistory', {});
     return history[normalizeProductKey(productName)] || 0;
 }
 
 function saveQuantityHistory(productName, quantity) {
     if (!productName || quantity <= 0) return;
-    const history = JSON.parse(localStorage.getItem('productQuantityHistory') || '{}');
+    const history = getStoredJSON('productQuantityHistory', {});
     history[normalizeProductKey(productName)] = quantity;
     localStorage.setItem('productQuantityHistory', JSON.stringify(history));
 }
 
 function getProductUnit(productName, supplierName) {
-    const units = JSON.parse(localStorage.getItem('productUnits') || '{}');
+    const units = getStoredJSON('productUnits', {});
     const legacyKey = `${productName}-${supplierName}`;
     if (units[legacyKey]) return units[legacyKey];
 
@@ -171,7 +152,7 @@ function getProductUnit(productName, supplierName) {
 }
 
 function isUnitAutoDetected(productName, supplierName) {
-    const units = JSON.parse(localStorage.getItem('productUnits') || '{}');
+    const units = getStoredJSON('productUnits', {});
     if (units[`${productName}-${supplierName}`]) return false;
     if (getSavedUnitPreference(productName)) return false;
     return true;
@@ -250,7 +231,7 @@ function refreshSupplierUI(data, scrollState) {
 function changeUnit(productName, supplierName, newUnit) {
     saveUnitPreference(productName, newUnit);
 
-    const units = JSON.parse(localStorage.getItem('productUnits') || '{}');
+    const units = getStoredJSON('productUnits', {});
     units[`${productName}-${supplierName}`] = newUnit;
     localStorage.setItem('productUnits', JSON.stringify(units));
 
@@ -459,17 +440,13 @@ function createSupplierCards(data) {
             
             const safeProduct = escapeHtml(product.product);
             const safeSupplier = escapeHtml(product.supplier);
-            const packSize = getEffectivePackSize(product.product, currentUnit);
             const unitLabel = unitTypeInfo ? unitTypeInfo.label : currentUnit;
-            const itemTotal = quantity * packSize * product.price;
+            const itemTotal = quantity * product.price;
             return `
-                <div class="product-item lowest-price" 
-                     draggable="true" 
+                <div class="product-item lowest-price"
                      data-product="${safeProduct}"
                      data-supplier="${safeSupplier}"
-                     data-unit-price="${product.price}"
-                     ondragstart="handleDragStart(event)"
-                     ondragend="handleDragEnd(event)">
+                     data-unit-price="${product.price}">
                     <div class="product-header">
                         <span class="product-name">${safeProduct}</span>
                         <div class="product-actions">
@@ -490,7 +467,6 @@ function createSupplierCards(data) {
                                     </button>
                                 </div>
                             </div>
-                            <span class="drag-handle">⋮⋮</span>
                         </div>
                     </div>
                     <div class="product-details">
@@ -510,19 +486,6 @@ function createSupplierCards(data) {
                                    onchange="updateSupplierQuantity(this)">
                             <span class="unit-badge${unitAuto ? ' unit-auto' : ''}" title="${unitAuto ? `Detectado: ${escapeHtml(unitLabel)}` : escapeHtml(unitLabel)}">${escapeHtml(currentUnit)}</span>
                         </div>
-                        <div class="product-detail pack-size-detail">
-                            <span class="product-detail-label">Itens por ${escapeHtml(currentUnit)}:</span>
-                            <input type="number"
-                                   class="pack-size-input"
-                                   value="${packSize}"
-                                   min="1"
-                                   step="1"
-                                   title="Quantos itens vêm em 1 ${escapeHtml(unitLabel.toLowerCase())}. O total = quantidade × itens por embalagem × preço unitário."
-                                   data-product="${safeProduct}"
-                                   oninput="updatePackSize(this)"
-                                   onchange="updatePackSize(this)">
-                            <span class="pack-size-hint">un/${escapeHtml(currentUnit)}</span>
-                        </div>
                         <div class="product-detail">
                             <span class="product-detail-label">Preço Unit.:</span>
                             <span class="product-detail-value lowest">
@@ -540,12 +503,8 @@ function createSupplierCards(data) {
         
         const safeSupplierCard = escapeHtml(supplier);
         return `
-            <div class="supplier-card" 
-                 data-supplier="${safeSupplierCard}"
-                 ondragover="handleDragOver(event)"
-                 ondrop="handleDrop(event)"
-                 ondragenter="handleDragEnter(event)"
-                 ondragleave="handleDragLeave(event)">
+            <div class="supplier-card"
+                 data-supplier="${safeSupplierCard}">
                 <div class="supplier-header">
                     <div class="supplier-name">
                         <i class="fas fa-store"></i>
@@ -600,17 +559,6 @@ function updateSupplierQuantity(input) {
     saveUpdatedData();
 }
 
-// Função para atualizar itens por embalagem
-function updatePackSize(input) {
-    const product = input.dataset.product;
-    const packSize = parseInt(input.value) || 0;
-    
-    log(`Atualizando itens por embalagem: ${product} -> ${packSize}`);
-    
-    savePackSize(product, packSize);
-    updateSupplierStats();
-}
-
 // Função para calcular totais por fornecedor e total geral
 function updateSupplierStats() {
     let grandTotal = 0;
@@ -620,12 +568,10 @@ function updateSupplierStats() {
 
         card.querySelectorAll('.product-item').forEach(item => {
             const input = item.querySelector('.quantity-input-supplier');
-            const packInput = item.querySelector('.pack-size-input');
             if (!input) return;
             const quantity = parseInt(input.value) || 0;
             const unitPrice = parseFloat(input.dataset.unitPrice) || 0;
-            const packSize = packInput ? (parseInt(packInput.value) || 1) : 1;
-            const itemTotal = quantity * packSize * unitPrice;
+            const itemTotal = quantity * unitPrice;
             supplierTotal += itemTotal;
 
             // Atualizar o total exibido no próprio produto
@@ -684,216 +630,6 @@ function saveUpdatedData() {
     }
 }
 
-// Variáveis globais para drag and drop
-let draggedElement = null;
-let draggedData = null;
-let scrollInterval = null;
-let isDragging = false;
-
-// Função para scroll automático durante o drag
-function startAutoScroll() {
-    if (scrollInterval) return;
-    
-    scrollInterval = setInterval(() => {
-        if (!isDragging) return;
-        
-        const mouseY = window.mouseY || 0;
-        const windowHeight = window.innerHeight;
-        const scrollThreshold = 100; // pixels da borda para iniciar scroll
-        
-        // Scroll para baixo se o mouse estiver próximo da borda inferior
-        if (mouseY > windowHeight - scrollThreshold) {
-            window.scrollBy(0, 10);
-        }
-        // Scroll para cima se o mouse estiver próximo da borda superior
-        else if (mouseY < scrollThreshold) {
-            window.scrollBy(0, -10);
-        }
-    }, 16); // ~60fps
-}
-
-function stopAutoScroll() {
-    if (scrollInterval) {
-        clearInterval(scrollInterval);
-        scrollInterval = null;
-    }
-}
-
-// Funções de drag and drop
-function handleDragStart(event) {
-    // Encontrar o elemento product-item (container do produto)
-    const productItem = event.target.closest('.product-item');
-    if (!productItem) {
-        console.error('Elemento product-item não encontrado');
-        return;
-    }
-    
-    draggedElement = productItem;
-    draggedData = {
-        product: productItem.dataset.product,
-        supplier: productItem.dataset.supplier,
-        unitPrice: parseFloat(productItem.dataset.unitPrice)
-    };
-    
-    log('Iniciando drag:', draggedData);
-    log('Elemento sendo arrastado:', productItem);
-    
-    productItem.style.opacity = '0.5';
-    event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('text/plain', JSON.stringify(draggedData));
-    event.dataTransfer.setData('text/html', productItem.outerHTML);
-    
-    // Iniciar scroll automático
-    isDragging = true;
-    startAutoScroll();
-}
-
-function handleDragEnd(event) {
-    if (draggedElement) {
-        draggedElement.style.opacity = '1';
-    }
-    draggedElement = null;
-    draggedData = null;
-    
-    // Parar scroll automático
-    isDragging = false;
-    stopAutoScroll();
-    
-    // Remover todas as classes de drop zone
-    document.querySelectorAll('.supplier-card').forEach(card => {
-        card.classList.remove('drag-over');
-    });
-}
-
-function handleDragOver(event) {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-    log('Drag over fornecedor:', event.currentTarget.dataset.supplier);
-}
-
-function handleDragEnter(event) {
-    event.preventDefault();
-    const supplierCard = event.currentTarget;
-    supplierCard.classList.add('drag-over');
-    log('Drag enter fornecedor:', supplierCard.dataset.supplier);
-}
-
-function handleDragLeave(event) {
-    const supplierCard = event.currentTarget;
-    // Verificar se realmente saiu do card
-    if (!supplierCard.contains(event.relatedTarget)) {
-        supplierCard.classList.remove('drag-over');
-        log('Drag leave fornecedor:', supplierCard.dataset.supplier);
-    }
-}
-
-function handleDrop(event) {
-    event.preventDefault();
-    const supplierCard = event.currentTarget;
-    const newSupplier = supplierCard.dataset.supplier;
-    
-    log('=== DROP EVENT TRIGGERED ===');
-    log('Novo fornecedor:', newSupplier);
-    log('Dados do produto arrastado (global):', draggedData);
-    
-    supplierCard.classList.remove('drag-over');
-    
-    if (!draggedData) {
-        console.error('❌ Nenhum dado de drag encontrado!');
-        return;
-    }
-    
-    log(`Movendo ${draggedData.product} de ${draggedData.supplier} para ${newSupplier}`);
-    log('Fornecedor atual:', draggedData.supplier);
-    log('Novo fornecedor:', newSupplier);
-    log('São diferentes?', draggedData.supplier !== newSupplier);
-    
-    // Verificar se não está tentando mover para o mesmo fornecedor
-    if (draggedData.supplier === newSupplier) {
-        log('❌ Tentativa de mover para o mesmo fornecedor, ignorando...');
-        return;
-    }
-    
-    log('✅ Fornecedores diferentes, prosseguindo...');
-    
-    // Encontrar o novo preço para este produto neste fornecedor
-    const savedData = localStorage.getItem('canaverdeData');
-    if (!savedData) return;
-    
-    try {
-        const data = JSON.parse(savedData);
-        log('Dados carregados do localStorage:', data);
-        
-        // Encontrar o item com o novo preço - busca mais robusta
-        log('Procurando produto:', draggedData.product);
-        log('No fornecedor:', newSupplier);
-        
-        // Buscar por nome exato primeiro
-        let newPriceItem = data.data.find(item => 
-            item.product === draggedData.product && item.supplier === newSupplier
-        );
-        
-        // Se não encontrar, buscar por similaridade (caso haja diferenças de espaços, etc.)
-        if (!newPriceItem) {
-            log('Busca exata falhou, tentando busca por similaridade...');
-            newPriceItem = data.data.find(item => 
-                item.product.trim() === draggedData.product.trim() && 
-                item.supplier.trim() === newSupplier.trim()
-            );
-        }
-        
-        log('Item encontrado no novo fornecedor:', newPriceItem);
-        
-        if (!newPriceItem) {
-            log(`⚠️ Produto ${draggedData.product} não encontrado no fornecedor ${newSupplier}`);
-            log('Produtos disponíveis no fornecedor:', data.data.filter(item => item.supplier === newSupplier));
-            
-            // Tentar encontrar o produto em qualquer fornecedor para debug
-            const productInAnySupplier = data.data.find(item => item.product === draggedData.product);
-            log('Produto encontrado em outro fornecedor:', productInAnySupplier);
-            
-            // Se o produto não existe no fornecedor de destino, criar um novo item
-            log('🔄 Criando novo item para o fornecedor de destino...');
-            
-            // Encontrar o preço mais próximo ou usar o preço atual
-            const newPrice = draggedData.unitPrice; // Usar o preço atual como base
-            
-            // Criar novo item para o fornecedor de destino
-            const newItem = {
-                product: draggedData.product,
-                supplier: newSupplier,
-                price: newPrice,
-                quantity: 0,
-                totalPrice: 0
-            };
-            
-            // Adicionar o novo item aos dados
-            data.data.push(newItem);
-            log('✅ Novo item criado:', newItem);
-            
-            // Usar o novo item como newPriceItem
-            newPriceItem = newItem;
-        }
-        
-        log('✅ Produto encontrado! Prosseguindo com a atualização...');
-        
-        // Atualizar os dados
-        updateProductSupplier(data, draggedData.product, draggedData.supplier, newSupplier, newPriceItem.price);
-        
-        // Recriar a interface mantendo a ordem
-        log('🔄 Recriando interface com dados atualizados...');
-        createSupplierCards(data);
-        updateStats(data);
-        
-        log(`✅ Produto movido com sucesso! Novo preço: R$ ${newPriceItem.price.toFixed(2)}`);
-        log('Total de produtos após movimentação:', data.data.length);
-        
-    } catch (error) {
-        console.error('❌ Erro ao processar drop:', error);
-        console.error('Stack trace:', error.stack);
-    }
-}
-
 function updateProductSupplier(data, productName, oldSupplier, newSupplier, newPrice) {
     log(`Atualizando produto: ${productName} de ${oldSupplier} para ${newSupplier}`);
     
@@ -932,14 +668,14 @@ function updateProductSupplier(data, productName, oldSupplier, newSupplier, newP
         lowestPricesMap.delete(oldKey);
         
         // Adicionar ao novo fornecedor
-        lowestPricesMap.set(newKey, newPrice);
+        lowestPricesMap.set(newKey, true);
         
         log('Mapa após atualização:', lowestPricesMap);
         
         data.lowestPrices = Array.from(lowestPricesMap.entries());
         
         // Transferir unidade do produto para o novo fornecedor
-        const units = JSON.parse(localStorage.getItem('productUnits') || '{}');
+        const units = getStoredJSON('productUnits', {});
         const oldUnitKey = `${productName}-${oldSupplier}`;
         const newUnitKey = `${productName}-${newSupplier}`;
         if (units[oldUnitKey]) {
@@ -972,61 +708,47 @@ function copySupplierText(supplierName) {
     
     // Coletar dados dos produtos
     const products = supplierCard.querySelectorAll('.product-item');
-    const supplierStats = supplierCard.querySelectorAll('.supplier-stat');
-    
+    const productsCountStat = supplierCard.querySelector('.supplier-stat:not(.supplier-total-stat) .supplier-stat-number');
+
     // Formatar texto para WhatsApp
     let whatsappText = `🛒 *${supplierName}*\n\n`;
-    
+
     // Adicionar estatísticas do fornecedor
-    if (supplierStats.length >= 1) {
-        const totalProducts = supplierStats[0].querySelector('.supplier-stat-number').textContent;
+    if (productsCountStat) {
         whatsappText += `📊 *Estatísticas:*\n`;
-        whatsappText += `• Produtos: ${totalProducts}\n\n`;
+        whatsappText += `• Produtos: ${productsCountStat.textContent}\n\n`;
     }
     
     // Adicionar lista de produtos
     whatsappText += `📋 *Lista de Produtos:*\n`;
     
     let hasProducts = false;
-    let orderTotal = 0;
     products.forEach((product, index) => {
         const productName = product.querySelector('.product-name').textContent;
         const quantityInput = product.querySelector('.quantity-input-supplier');
-        const packInput = product.querySelector('.pack-size-input');
-        const unitPrice = product.querySelector('.product-detail-value').textContent;
-        
+        const unitPrice = product.querySelector('.product-detail-value.lowest').textContent;
+
         const quantity = parseInt(quantityInput.value) || 0;
-        const packSize = packInput ? (parseInt(packInput.value) || 1) : 1;
-        const price = parseFloat(quantityInput.dataset.unitPrice) || 0;
-        const itemTotal = quantity * packSize * price;
-        orderTotal += itemTotal;
         const unitBadge = product.querySelector('.unit-badge');
         const unit = unitBadge ? unitBadge.textContent.trim() : 'cx';
-        
+
         // Limpar completamente o preço e reconstruir
         const cleanPrice = unitPrice.replace(/\s+/g, ' ').trim();
-        
+
         whatsappText += `${index + 1}. *${productName}*\n`;
-        whatsappText += `   • Quantidade: ${quantity} ${unit}${packSize > 1 ? ` (${packSize} un/${unit})` : ''}\n`;
+        whatsappText += `   • Quantidade: ${quantity} ${unit}\n`;
         whatsappText += `   • Preço Unit.: ${cleanPrice}\n`;
-        if (itemTotal > 0) {
-            whatsappText += `   • Total: ${formatCurrency(itemTotal)}\n`;
-        }
         whatsappText += `\n`;
-        
+
         hasProducts = true;
     });
-    
-    if (orderTotal > 0) {
-        whatsappText += `💵 *Total do Pedido: ${formatCurrency(orderTotal)}*\n`;
-    }
-    
+
     if (!hasProducts) {
         whatsappText += `Nenhum produto com quantidade definida.\n\n`;
     }
     
     // Adicionar mensagem final
-    whatsappText += `\n${getTimeGreeting()}\n\nSegue pedido Canaverde`;
+    whatsappText += `${getTimeGreeting()}\n\nSegue pedido Canaverde`;
     
     // Copiar para área de transferência
     navigator.clipboard.writeText(whatsappText).then(() => {
@@ -1288,7 +1010,7 @@ function toggleSupplierFinished(checkbox) {
 
 // Função para salvar estado dos checkboxes
 function saveCheckboxState(supplierName, isFinished) {
-    const finishedSuppliers = JSON.parse(localStorage.getItem('finishedSuppliers') || '{}');
+    const finishedSuppliers = getStoredJSON('finishedSuppliers', {});
     finishedSuppliers[supplierName] = isFinished;
     localStorage.setItem('finishedSuppliers', JSON.stringify(finishedSuppliers));
     log(`Estado do fornecedor ${supplierName} salvo: ${isFinished}`);
@@ -1296,7 +1018,7 @@ function saveCheckboxState(supplierName, isFinished) {
 
 // Função para restaurar estado dos checkboxes
 function restoreCheckboxStates() {
-    const finishedSuppliers = JSON.parse(localStorage.getItem('finishedSuppliers') || '{}');
+    const finishedSuppliers = getStoredJSON('finishedSuppliers', {});
     
     document.querySelectorAll('.supplier-finished-checkbox').forEach(checkbox => {
         const supplierName = checkbox.dataset.supplier;
@@ -1336,7 +1058,7 @@ function removeProduct(productName, supplierName) {
         }
         
         // Salvar produto removido
-        const removedProducts = JSON.parse(localStorage.getItem('removedProducts') || '[]');
+        const removedProducts = getStoredJSON('removedProducts', []);
         removedProducts.push({
             product: productName,
             supplier: supplierName,
@@ -1370,7 +1092,7 @@ function removeProduct(productName, supplierName) {
 
 // Função para atualizar seção de produtos removidos
 function updateRemovedProductsSection() {
-    const removedProducts = JSON.parse(localStorage.getItem('removedProducts') || '[]');
+    const removedProducts = getStoredJSON('removedProducts', []);
     const section = document.getElementById('removedProductsSection');
     const container = document.getElementById('removedProductsContainer');
     
@@ -1429,7 +1151,7 @@ function restoreProduct(productName, supplierName) {
     log(`Restaurando produto: ${productName} para fornecedor: ${supplierName}`);
     
     const savedData = localStorage.getItem('canaverdeData');
-    const removedProducts = JSON.parse(localStorage.getItem('removedProducts') || '[]');
+    const removedProducts = getStoredJSON('removedProducts', []);
     
     if (!savedData) return;
     
@@ -1467,7 +1189,7 @@ function restoreProduct(productName, supplierName) {
         // Adicionar de volta ao mapa de menores preços
         const lowestPricesMap = new Map(data.lowestPrices || []);
         const keyToRestore = `${productName}-${supplierName}`;
-        lowestPricesMap.set(keyToRestore, removedItem.price);
+        lowestPricesMap.set(keyToRestore, true);
         data.lowestPrices = Array.from(lowestPricesMap.entries());
         
         // Remover da lista de produtos removidos
@@ -1742,6 +1464,196 @@ function closePriceComparison() {
     }
 }
 
+// ===== Histórico de cotações (Firestore, acessível de qualquer computador) =====
+let historyCache = null; // preenchido após buscar do Firestore; null enquanto carrega
+
+function formatHistoryDate(isoString) {
+    try {
+        return new Date(isoString).toLocaleString('pt-BR', {
+            day: '2-digit', month: '2-digit', year: 'numeric',
+            hour: '2-digit', minute: '2-digit'
+        });
+    } catch (e) {
+        return isoString || '';
+    }
+}
+
+function renderHistoryLoadingView() {
+    return `
+        <div class="comparison-header">
+            <div class="comparison-title">
+                <i class="fas fa-history"></i>
+                <h3>Histórico de Cotações</h3>
+            </div>
+            <button class="comparison-close" onclick="closeHistoryModal()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="history-list">
+            <div class="history-empty"><i class="fas fa-spinner fa-spin"></i><p>Carregando histórico...</p></div>
+        </div>
+    `;
+}
+
+function renderHistoryListView() {
+    const history = historyCache || [];
+
+    const listHtml = history.length === 0
+        ? `<div class="history-empty"><i class="fas fa-box-open"></i><p>Nenhuma cotação anterior encontrada ainda. Assim que você carregar uma nova planilha com quantidades preenchidas, a cotação atual entra aqui.</p></div>`
+        : history.map((cotacao, index) => `
+            <div class="history-item">
+                <div class="history-item-info">
+                    <div class="history-item-date"><i class="fas fa-calendar-alt"></i> ${escapeHtml(formatHistoryDate(cotacao.timestamp))}</div>
+                    <div class="history-item-stats">
+                        <span><i class="fas fa-store"></i> ${(cotacao.suppliers || []).length} fornecedor(es)</span>
+                        <span><i class="fas fa-box"></i> ${(cotacao.products || []).length} produto(s)</span>
+                    </div>
+                </div>
+                <div class="history-item-right">
+                    <div class="history-item-total">${formatCurrency(cotacao.grandTotal)}</div>
+                    <button class="history-view-btn" data-history-index="${index}">
+                        <i class="fas fa-eye"></i> Ver
+                    </button>
+                </div>
+            </div>
+        `).join('');
+
+    return `
+        <div class="comparison-header">
+            <div class="comparison-title">
+                <i class="fas fa-history"></i>
+                <h3>Histórico de Cotações</h3>
+            </div>
+            <button class="comparison-close" onclick="closeHistoryModal()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="history-list">${listHtml}</div>
+    `;
+}
+
+function renderHistoryErrorView() {
+    return `
+        <div class="comparison-header">
+            <div class="comparison-title">
+                <i class="fas fa-history"></i>
+                <h3>Histórico de Cotações</h3>
+            </div>
+            <button class="comparison-close" onclick="closeHistoryModal()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="history-list">
+            <div class="history-empty"><i class="fas fa-wifi"></i><p>Não foi possível carregar o histórico. Verifique sua conexão com a internet e tente novamente.</p></div>
+        </div>
+    `;
+}
+
+function goToHistoryList() {
+    const overlay = document.querySelector('.history-overlay');
+    if (!overlay) return;
+    const modal = overlay.querySelector('.history-modal');
+    modal.innerHTML = renderHistoryListView();
+    attachHistoryViewListeners();
+}
+
+function attachHistoryViewListeners() {
+    document.querySelectorAll('.history-view-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            showHistoryDetail(parseInt(this.dataset.historyIndex, 10));
+        });
+    });
+}
+
+function openHistoryModal() {
+    const overlay = document.createElement('div');
+    overlay.className = 'history-overlay';
+    overlay.onclick = function(e) {
+        if (e.target === overlay) closeHistoryModal();
+    };
+
+    overlay.innerHTML = `<div class="history-modal">${renderHistoryLoadingView()}</div>`;
+
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add('visible'));
+
+    db.collection('cotacoes').orderBy('timestamp', 'desc').limit(MAX_COTACOES_HISTORICO).get()
+        .then(snapshot => {
+            historyCache = snapshot.docs.map(doc => doc.data());
+            const currentOverlay = document.querySelector('.history-overlay');
+            if (!currentOverlay) return; // usuário já fechou o modal
+            const modal = currentOverlay.querySelector('.history-modal');
+            modal.innerHTML = renderHistoryListView();
+            attachHistoryViewListeners();
+        })
+        .catch(error => {
+            console.error('Erro ao carregar histórico do Firestore:', error);
+            const currentOverlay = document.querySelector('.history-overlay');
+            if (!currentOverlay) return;
+            currentOverlay.querySelector('.history-modal').innerHTML = renderHistoryErrorView();
+        });
+}
+
+function closeHistoryModal() {
+    const overlay = document.querySelector('.history-overlay');
+    if (overlay) {
+        overlay.classList.remove('visible');
+        setTimeout(() => {
+            if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+        }, 300);
+    }
+}
+
+function showHistoryDetail(index) {
+    const cotacao = (historyCache || [])[index];
+    if (!cotacao) return;
+
+    const bySupplier = new Map();
+    (cotacao.data || []).forEach(item => {
+        if (!item.quantity || item.quantity <= 0) return;
+        if (!bySupplier.has(item.supplier)) bySupplier.set(item.supplier, []);
+        bySupplier.get(item.supplier).push(item);
+    });
+
+    const suppliersHtml = Array.from(bySupplier.entries()).map(([supplier, items]) => {
+        const supplierTotal = items.reduce((sum, item) => sum + item.quantity * item.price, 0);
+        const rowsHtml = items.map(item => `
+            <div class="history-detail-row">
+                <span class="history-detail-product">${escapeHtml(item.product)}</span>
+                <span class="history-detail-qty">${item.quantity} × ${formatCurrency(item.price)}</span>
+                <span class="history-detail-total">${formatCurrency(item.quantity * item.price)}</span>
+            </div>
+        `).join('');
+        return `
+            <div class="history-detail-supplier">
+                <div class="history-detail-supplier-header">
+                    <span><i class="fas fa-store"></i> ${escapeHtml(supplier)}</span>
+                    <span>${formatCurrency(supplierTotal)}</span>
+                </div>
+                ${rowsHtml}
+            </div>
+        `;
+    }).join('') || '<p class="history-empty-detail">Nenhum produto com quantidade nessa cotação.</p>';
+
+    const overlay = document.querySelector('.history-overlay');
+    if (!overlay) return;
+    const modal = overlay.querySelector('.history-modal');
+    modal.innerHTML = `
+        <div class="comparison-header">
+            <div class="comparison-title">
+                <button class="history-back-btn" onclick="goToHistoryList()">
+                    <i class="fas fa-arrow-left"></i>
+                </button>
+                <h3>${escapeHtml(formatHistoryDate(cotacao.timestamp))}</h3>
+            </div>
+            <button class="comparison-close" onclick="closeHistoryModal()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="history-list">${suppliersHtml}</div>
+    `;
+}
+
 // Função para exportar planilha Excel com células selecionadas em amarelo
 async function exportHighlightedExcel() {
     log('Exportando planilha com destaques...');
@@ -1755,7 +1667,7 @@ async function exportHighlightedExcel() {
     try {
         const data = JSON.parse(savedData);
         const lowestPricesMap = new Map(data.lowestPrices || []);
-        const removedProducts = JSON.parse(localStorage.getItem('removedProducts') || '[]');
+        const removedProducts = getStoredJSON('removedProducts', []);
         const removedSet = new Set(removedProducts.map(r => `${r.product}-${r.supplier}`));
         
         // Obter lista de fornecedores na ordem original
@@ -2074,13 +1986,9 @@ window.addEventListener('scroll', function() {
 document.addEventListener('keydown', function(event) {
     if (event.key === 'Escape') {
         closePriceComparison();
+        closeHistoryModal();
         closeAllMenus();
     }
-});
-
-// Rastrear posição do mouse para scroll automático
-document.addEventListener('mousemove', (event) => {
-    window.mouseY = event.clientY;
 });
 
 // Carregar dados quando a página carregar
