@@ -61,13 +61,13 @@ Abra `http://127.0.0.1:8081` no navegador.
 - Cards por fornecedor com produtos de menor preço selecionados
 - **Quantidade** editável com memória da última compra (fundo amarelo = valor lembrado)
 - **Unidade automática** por nome do produto (cx, fd, dp, un, dz, ct) — badge azul = detectado; alterações manuais são memorizadas
-- **Itens por embalagem** — total = `quantidade × itens por embalagem × preço unitário`
-- Total por produto, total por fornecedor e total geral do pedido
-- Drag and drop entre fornecedores
-- Comparar preços, remover/restaurar produtos
+- Total = `quantidade × preço unitário`; total por fornecedor e total geral do pedido
+- Comparar preços e trocar produto de fornecedor pelo menu "⋮" de cada produto
+- Remover/restaurar produtos
 - Copiar lista para WhatsApp (com saudação por horário)
 - Exportar planilha Excel com destaques amarelos, formatação A4 e numeração de páginas na impressão
 - Resetar ao estado original da planilha
+- **Histórico de cotações na nuvem** (botão "📜 Histórico") — cada cotação com quantidades preenchidas é arquivada automaticamente no Firestore antes de ser descartada por um novo upload, acessível de qualquer computador com internet
 
 ---
 
@@ -80,7 +80,8 @@ Canaverde/
 │   └── suppliers.html      # Página de fornecedores
 ├── js/
 │   ├── script.js           # Análise, upload, filtros, exportação
-│   └── suppliers.js        # Fornecedores, totais, WhatsApp, Excel
+│   ├── suppliers.js        # Fornecedores, totais, WhatsApp, Excel, histórico
+│   └── firebase-config.js  # Config do Firebase (histórico de cotações na nuvem)
 ├── css/
 │   └── styles.css
 ├── assets/
@@ -98,24 +99,26 @@ Canaverde/
 | Exportação cotação | [ExcelJS](https://github.com/exceljs/exceljs) |
 | Ícones | Font Awesome 6 |
 | Fonte | Inter (Google Fonts) |
-| Persistência | `localStorage` |
+| Persistência de sessão | `localStorage` |
+| Histórico de cotações | [Firebase / Firestore](https://firebase.google.com/) (projeto `mercado-canaverde`) |
 
 ---
 
-## Versão atual — 2.3
+## Versão atual — 2.4
 
-**Junho 2026**
+**Julho 2026**
 
-### Destaques da v2.3
-- Ícones nos cards de estatísticas (produtos, fornecedores, menores preços, totais)
-- Status da tabela de preços ("Menor Preço" / "Preço Selecionado") como badges em pílula
-- Faixa de destaque verde no topo dos cards de fornecedor
-- Cores de foco/hover do campo de quantidade alinhadas à paleta verde
-- Limpeza de regras de CSS legadas/duplicadas não utilizadas
+### Destaques da v2.4
+- **Histórico de cotações na nuvem** (Firestore) — acessível de qualquer computador, últimas 20 cotações
+- Remove drag and drop entre fornecedores (fluxo "Comparar Preços" já cobria o mesmo caso, sem risco de preço "fantasma")
+- Remove "itens por embalagem" — total agora é sempre `quantidade × preço unitário`
+- Mensagem de WhatsApp e card do produto mais enxutos (sem linhas de total redundantes)
+- Correções de robustez: leitura de `localStorage` protegida contra dado corrompido, `escapeHtml` em mais pontos, limpeza completa de sessão ao trocar de planilha
 
 ### Histórico resumido
 | Versão | Principais entregas |
 |--------|---------------------|
+| 2.4 | Histórico de cotações na nuvem, remoção de drag-and-drop e itens por embalagem, correções de robustez |
 | 2.3 | Polimento visual (ícones, badges, detalhes em verde) e limpeza de CSS |
 | 2.2 | Embalagens, visual, correções |
 | 2.1 | Filtros, economia potencial, exportação de resultados, numeração Excel |
@@ -147,7 +150,8 @@ Exemplos: `feat: exportação Excel otimizada para A4`, `fix: preserva scroll ao
 | Planilha não carrega | Formato `.xlsx`/`.xls`, tamanho ≤ 10 MB, coluna Produto preenchida |
 | Fornecedor não aparece | Nome da coluna não pode ser palavra reservada (ex.: "Total", "Preço") |
 | Página em branco local | Servir via `http-server`; não abrir `index.html` direto do disco |
-| Dados sumiram | Novo upload limpa a sessão; histórico de quantidade/unidade permanece no navegador |
+| Dados sumiram | Novo upload limpa a sessão; histórico de quantidade/unidade permanece no navegador e a cotação anterior (se tinha quantidades) fica salva no histórico da nuvem ("📜 Histórico") |
+| Histórico não carrega | Verifique conexão com a internet; as regras do Firestore precisam estar publicadas na coleção `cotacoes` |
 
 Console do navegador (`F12`) para erros detalhados. Logs de debug: flag `DEBUG` em `suppliers.js`.
 
