@@ -2936,14 +2936,6 @@ select:focus-visible {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
-.product-total-detail .product-item-total {
-    font-weight: 700;
-    color: #1b5e20;
-    background: rgba(139, 195, 74, 0.18);
-    padding: 3px 10px;
-    border-radius: 8px;
-}
-
 /* Badge de unidade detectada automaticamente */
 .unit-badge.unit-auto {
     border-style: dashed;

@@ -441,7 +441,6 @@ function createSupplierCards(data) {
             const safeProduct = escapeHtml(product.product);
             const safeSupplier = escapeHtml(product.supplier);
             const unitLabel = unitTypeInfo ? unitTypeInfo.label : currentUnit;
-            const itemTotal = quantity * product.price;
             return `
                 <div class="product-item lowest-price"
                      data-product="${safeProduct}"
@@ -491,10 +490,6 @@ function createSupplierCards(data) {
                             <span class="product-detail-value lowest">
                                 R$ ${product.price.toFixed(2).replace('.', ',')}
                             </span>
-                        </div>
-                        <div class="product-detail product-total-detail">
-                            <span class="product-detail-label">Total:</span>
-                            <span class="product-detail-value product-item-total">${formatCurrency(itemTotal)}</span>
                         </div>
                     </div>
                 </div>
@@ -571,12 +566,7 @@ function updateSupplierStats() {
             if (!input) return;
             const quantity = parseInt(input.value) || 0;
             const unitPrice = parseFloat(input.dataset.unitPrice) || 0;
-            const itemTotal = quantity * unitPrice;
-            supplierTotal += itemTotal;
-
-            // Atualizar o total exibido no próprio produto
-            const itemTotalEl = item.querySelector('.product-item-total');
-            if (itemTotalEl) itemTotalEl.textContent = formatCurrency(itemTotal);
+            supplierTotal += quantity * unitPrice;
         });
 
         grandTotal += supplierTotal;
