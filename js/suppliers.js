@@ -1665,9 +1665,11 @@ async function exportHighlightedExcel() {
         worksheet.pageSetup = {
             paperSize: 9,
             orientation: useLandscape ? 'landscape' : 'portrait',
-            fitToPage: true,
-            fitToWidth: 1,
-            fitToHeight: 0,
+            // Sem fitToPage: imprime em tamanho real (sem encolher a fonte).
+            // Com muitos fornecedores, isso pagina em mais de 1 página de largura
+            // em vez de espremer tudo — assim nada fica cortado nem ilegível.
+            fitToPage: false,
+            scale: 100,
             horizontalCentered: true,
             verticalCentered: false,
             margins: {
@@ -1679,9 +1681,10 @@ async function exportHighlightedExcel() {
                 footer: 0.2
             }
         };
-        
-        // Repetir cabeçalho em todas as páginas ao imprimir
+
+        // Repetir cabeçalho (linha) e coluna de produto em todas as páginas ao imprimir
         worksheet.pageSetup.printTitlesRow = '1:1';
+        worksheet.pageSetup.printTitlesColumn = 'A:A';
 
         // Numeração de páginas no rodapé ao imprimir
         worksheet.headerFooter = {
@@ -1703,14 +1706,13 @@ async function exportHighlightedExcel() {
             cell.font = {
                 bold: true,
                 color: { argb: 'FFFFFFFF' },
-                size: 9,
+                size: 11,
                 name: 'Arial'
             };
             cell.alignment = {
                 horizontal: 'center',
                 vertical: 'middle',
-                wrapText: false,
-                shrinkToFit: true
+                wrapText: true
             };
             cell.border = {
                 top: { style: 'thin', color: { argb: 'FF1B5E20' } },
@@ -1741,30 +1743,28 @@ async function exportHighlightedExcel() {
                 };
                 
                 if (colNumber === 1) {
-                    cell.font = { bold: false, size: 9, name: 'Calibri' };
+                    cell.font = { bold: false, size: 11, name: 'Calibri' };
                     cell.alignment = {
                         horizontal: 'left',
                         vertical: 'middle',
-                        wrapText: false,
-                        shrinkToFit: true
+                        wrapText: true
                     };
                 }
-                
+
                 if (colNumber >= 2) {
                     const supplierIndex = colNumber - 2;
                     const supplier = suppliers[supplierIndex];
                     const key = `${product}-${supplier}`;
-                    
-                    cell.font = { size: 9, name: 'Arial' };
-                    
+
+                    cell.font = { size: 11, name: 'Arial' };
+
                     if (cell.value && typeof cell.value === 'number') {
                         cell.numFmt = '#,##0.00';
                     }
-                    
+
                     cell.alignment = {
                         horizontal: 'center',
-                        vertical: 'middle',
-                        shrinkToFit: true
+                        vertical: 'middle'
                     };
                     
                     if (lowestPricesMap.has(key) && !removedSet.has(key)) {
@@ -1773,7 +1773,7 @@ async function exportHighlightedExcel() {
                             pattern: 'solid',
                             fgColor: { argb: 'FFFFFF00' }
                         };
-                        cell.font = { bold: true, size: 9, name: 'Arial' };
+                        cell.font = { bold: true, size: 11, name: 'Arial' };
                     }
                 }
             });
@@ -1782,19 +1782,18 @@ async function exportHighlightedExcel() {
         // Calcular larguras de coluna otimizadas para caber em A4
         const maxPageWidth = useLandscape ? 135 : 95;
         const productColWidth = Math.min(64, Math.max(44, maxPageWidth - (suppliers.length * 7)));
-        const supplierColWidth = Math.max(10, Math.floor((maxPageWidth - productColWidth) / suppliers.length));
+        const supplierColWidth = Math.max(12, Math.floor((maxPageWidth - productColWidth) / suppliers.length));
         
         worksheet.getColumn(1).width = productColWidth;
         for (let i = 2; i <= suppliers.length + 1; i++) {
             worksheet.getColumn(i).width = supplierColWidth;
         }
         
-        // Altura das linhas compacta para impressão
-        worksheet.eachRow((row) => {
-            row.height = 18;
-        });
-        headerRow.height = 18;
-        
+        // Altura das linhas: não fixamos um valor — com quebra de texto ligada
+        // (nomes longos de produto/fornecedor), uma altura fixa cortaria o texto
+        // que não coubesse. Deixando em aberto, o Excel calcula a altura certa
+        // sozinho ao abrir/imprimir.
+
         // Linhas zebradas para facilitar leitura na impressão
         worksheet.eachRow((row, rowNumber) => {
             if (rowNumber > 1 && rowNumber % 2 === 0) {
