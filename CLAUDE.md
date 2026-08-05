@@ -36,14 +36,23 @@ Persistent across uploads (memory features, never cleared by `clearData`):
 - `productUnitPrefs` — user-chosen unit per product (keyed by `normalizeProductKey`)
 - `productQuantityHistory` — last entered quantity per product, used to pre-fill and highlight (yellow) on next upload
 
+Both of the above are mirrored to the cloud (see below) so they work across computers; localStorage is just the instant-read/offline-safe local cache.
+
 ### Cloud quotation history (Firestore)
 
-The `cotacoes` collection in the `mercado-canaverde` Firebase project stores past quotations so they're browsable from any computer, not just the one that created them. No authentication — Firestore security rules restrict read/write to just the `cotacoes` collection, open (`allow read, write: if true`), no expiry. Acceptable tradeoff given the data isn't sensitive (product/supplier names and prices, no PII/payment info); anyone with the site's public Firebase config could technically write to this collection.
+The `cotacoes` collection in the `mercado-canaverde` Firebase project stores past quotations so they're browsable from any computer, not just the one that created them. No authentication — Firestore security rules restrict read/write to just the `cotacoes` and `memoria` collections, open (`allow read, write: if true`), no expiry. Acceptable tradeoff given the data isn't sensitive (product/supplier names and prices, no PII/payment info); anyone with the site's public Firebase config could technically write to these collections.
 
 - Each document ID is the cotação's `timestamp` (ISO string) — writing twice for the same cotação overwrites rather than duplicates.
 - Document shape: `{ timestamp, suppliers: string[], products: string[], data: [{product, supplier, price, quantity, ...}], grandTotal }`.
 - Written by `archiveCurrentCotacaoIfNeeded()` in `script.js`, only when the outgoing cotação has at least one item with `quantity > 0`.
 - Read by `openHistoryModal()` in `suppliers.js` (`js/suppliers.js`), querying the `MAX_COTACOES_HISTORICO` (20) most recent documents ordered by `timestamp desc`. Results are cached in the module-level `historyCache` for the detail view, to avoid extra reads.
+
+### Cloud product memory (Firestore)
+
+The `memoria/produtos` document (single doc, two map fields: `quantidades`, `unidades`) mirrors `productQuantityHistory`/`productUnitPrefs` to the cloud, so the last-ordered quantity and unit choice (e.g. cx → fd) for a product follow you to any computer, not just the one where you set them.
+
+- `loadMemoryFromCloud()` (`suppliers.js`) runs once at the start of `loadSuppliersData()`, awaited before rendering, and overwrites the two localStorage keys with whatever's in Firestore. Fails silently (logs to console, keeps whatever's local) if offline/denied — never blocks rendering.
+- `scheduleMemorySync()` debounces (1.5s) writes to Firestore, triggered from `saveUnitPreference()` and `saveQuantityHistory()`, so rapid edits (e.g. filling many quantities) don't spam the network with a write per keystroke.
 
 ### Spreadsheet parsing rules (`script.js`)
 

@@ -117,6 +117,41 @@ function detectUnitFromProduct(productName) {
     return bestUnit;
 }
 
+// ===== Memória de produtos (quantidade/unidade) sincronizada com a nuvem =====
+// Guardada localmente (leitura instantânea, funciona offline) e replicada no
+// Firestore (doc único "memoria/produtos") para funcionar em qualquer computador.
+let memorySyncTimeout = null;
+
+function scheduleMemorySync() {
+    clearTimeout(memorySyncTimeout);
+    memorySyncTimeout = setTimeout(syncMemoryToCloud, 1500);
+}
+
+function syncMemoryToCloud() {
+    const quantidades = getStoredJSON('productQuantityHistory', {});
+    const unidades = getStoredJSON('productUnitPrefs', {});
+    db.collection('memoria').doc('produtos').set({ quantidades, unidades })
+        .catch(error => console.error('Erro ao sincronizar memória de produtos com a nuvem:', error));
+}
+
+function loadMemoryFromCloud() {
+    return db.collection('memoria').doc('produtos').get()
+        .then(doc => {
+            if (!doc.exists) return;
+            const cloudData = doc.data();
+            if (cloudData.quantidades) {
+                localStorage.setItem('productQuantityHistory', JSON.stringify(cloudData.quantidades));
+            }
+            if (cloudData.unidades) {
+                localStorage.setItem('productUnitPrefs', JSON.stringify(cloudData.unidades));
+            }
+        })
+        .catch(error => {
+            console.error('Erro ao carregar memória de produtos da nuvem:', error);
+            // Segue com o que já existir localmente (funciona offline)
+        });
+}
+
 function getSavedUnitPreference(productName) {
     const prefs = getStoredJSON('productUnitPrefs', {});
     return prefs[normalizeProductKey(productName)] || null;
@@ -126,6 +161,7 @@ function saveUnitPreference(productName, unit) {
     const prefs = getStoredJSON('productUnitPrefs', {});
     prefs[normalizeProductKey(productName)] = unit;
     localStorage.setItem('productUnitPrefs', JSON.stringify(prefs));
+    scheduleMemorySync();
 }
 
 function getSavedQuantity(productName) {
@@ -138,6 +174,7 @@ function saveQuantityHistory(productName, quantity) {
     const history = getStoredJSON('productQuantityHistory', {});
     history[normalizeProductKey(productName)] = quantity;
     localStorage.setItem('productQuantityHistory', JSON.stringify(history));
+    scheduleMemorySync();
 }
 
 function getProductUnit(productName, supplierName) {
@@ -159,7 +196,8 @@ function isUnitAutoDetected(productName, supplierName) {
 }
 
 function applyProductMemory(data) {
-    if (!data || !data.data) return data;
+    const autoFilledKeys = new Set();
+    if (!data || !data.data) return autoFilledKeys;
 
     const lowestKeys = new Set(
         (data.lowestPrices || []).map(entry => (Array.isArray(entry) ? entry[0] : entry))
@@ -175,6 +213,7 @@ function applyProductMemory(data) {
             if (savedQty > 0) {
                 item.quantity = savedQty;
                 changed = true;
+                autoFilledKeys.add(key);
             }
         }
     });
@@ -182,7 +221,7 @@ function applyProductMemory(data) {
     if (changed) {
         localStorage.setItem('canaverdeData', JSON.stringify(data));
     }
-    return data;
+    return autoFilledKeys;
 }
 
 function formatCurrency(value) {
@@ -282,8 +321,9 @@ function goBackToMain() {
 }
 
 // Função para carregar dados na página de fornecedores
-function loadSuppliersData() {
+async function loadSuppliersData() {
     log('Iniciando carregamento de dados...');
+    await loadMemoryFromCloud();
     const savedData = localStorage.getItem('canaverdeData');
     
     if (!savedData) {
@@ -310,13 +350,13 @@ function loadSuppliersData() {
         log(`Produtos: ${data.products ? data.products.length : 0}`);
         log(`Menores preços: ${data.lowestPrices ? data.lowestPrices.length : 0}`);
 
-        applyProductMemory(data);
-        
+        const autoFilledKeys = applyProductMemory(data);
+
         // Atualizar estatísticas
         updateStats(data);
-        
+
         // Criar cards de fornecedores
-        createSupplierCards(data);
+        createSupplierCards(data, autoFilledKeys);
         
         // Atualizar seção de produtos removidos
         updateRemovedProductsSection();
@@ -368,7 +408,8 @@ function updateStats(data) {
 }
 
 // Função para criar cards de fornecedores
-function createSupplierCards(data) {
+function createSupplierCards(data, autoFilledKeys) {
+    autoFilledKeys = autoFilledKeys || new Set();
     const container = document.getElementById('suppliersContainer');
     if (!container) return;
     
@@ -430,7 +471,7 @@ function createSupplierCards(data) {
             log(`Renderizando produto ${index + 1}/${products.length}: ${product.product}`);
             const savedQty = getSavedQuantity(product.product);
             const quantity = product.quantity > 0 ? product.quantity : savedQty;
-            const isFromHistory = (!product.quantity || product.quantity === 0) && savedQty > 0;
+            const isFromHistory = autoFilledKeys.has(`${product.product}-${product.supplier}`);
             const currentUnit = getProductUnit(product.product, product.supplier);
             const unitAuto = isUnitAutoDetected(product.product, product.supplier);
             const unitTypeInfo = UNIT_TYPES.find(u => u.id === currentUnit);
