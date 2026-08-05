@@ -2690,31 +2690,6 @@ body::before {
     transform: translateY(0);
 }
 
-.supplier-stat.total-value {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-}
-
-.supplier-total-stat {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    min-width: 90px;
-}
-
-.supplier-total-stat .supplier-stat-number,
-.supplier-total-stat .supplier-stat-label {
-    color: white;
-}
-
-.stat-card-total {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-}
-
-.stat-card-total .stat-number,
-.stat-card-total .stat-label {
-    color: white;
-}
-
 /* ===== Unit Menu & Badge ===== */
 .menu-divider {
     height: 1px;

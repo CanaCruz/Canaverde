@@ -510,10 +510,6 @@ function createSupplierCards(data) {
                             <div class="supplier-stat-number">${products.length}</div>
                             <div class="supplier-stat-label">Menores Preços</div>
                         </div>
-                        <div class="supplier-stat supplier-total-stat">
-                            <div class="supplier-stat-number supplier-total-value">R$ 0,00</div>
-                            <div class="supplier-stat-label">Total</div>
-                        </div>
                     </div>
                 </div>
                 <div class="products-list">
@@ -537,9 +533,6 @@ function createSupplierCards(data) {
     
     // Restaurar estado dos checkboxes
     restoreCheckboxStates();
-    
-    // Atualizar totais após criar os cards
-    updateSupplierStats();
 }
 
 // Função para atualizar quantidade
@@ -547,40 +540,10 @@ function updateSupplierQuantity(input) {
     const product = input.dataset.product;
     const supplier = input.dataset.supplier;
     const quantity = parseInt(input.value) || 0;
-    
+
     log(`Atualizando quantidade: ${product} - ${supplier} - Qtd: ${quantity}`);
-    
-    updateSupplierStats();
+
     saveUpdatedData();
-}
-
-// Função para calcular totais por fornecedor e total geral
-function updateSupplierStats() {
-    let grandTotal = 0;
-
-    document.querySelectorAll('.supplier-card').forEach(card => {
-        let supplierTotal = 0;
-
-        card.querySelectorAll('.product-item').forEach(item => {
-            const input = item.querySelector('.quantity-input-supplier');
-            if (!input) return;
-            const quantity = parseInt(input.value) || 0;
-            const unitPrice = parseFloat(input.dataset.unitPrice) || 0;
-            supplierTotal += quantity * unitPrice;
-        });
-
-        grandTotal += supplierTotal;
-
-        const totalEl = card.querySelector('.supplier-total-value');
-        if (totalEl) {
-            totalEl.textContent = formatCurrency(supplierTotal);
-        }
-    });
-
-    const grandTotalEl = document.getElementById('grandTotalPage');
-    if (grandTotalEl) {
-        grandTotalEl.textContent = formatCurrency(grandTotal);
-    }
 }
 
 // Função para salvar dados atualizados
@@ -698,7 +661,7 @@ function copySupplierText(supplierName) {
     
     // Coletar dados dos produtos
     const products = supplierCard.querySelectorAll('.product-item');
-    const productsCountStat = supplierCard.querySelector('.supplier-stat:not(.supplier-total-stat) .supplier-stat-number');
+    const productsCountStat = supplierCard.querySelector('.supplier-stat-number');
 
     // Formatar texto para WhatsApp
     let whatsappText = `🛒 *${supplierName}*\n\n`;
